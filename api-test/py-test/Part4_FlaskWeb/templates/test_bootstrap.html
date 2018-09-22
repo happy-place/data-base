@@ -1,0 +1,15 @@
+{% extends "bootstrap-base.html" %} <!-- 继承现有flask-bootstrap 插件-->
+
+{% block content %}  <!-- 覆盖内容页 -->
+<div class="container">
+    {% for message in get_flashed_messages() %}
+        <div class="alert alert-warning">
+            <button type="button" class="close" data-dismiss="alert">&times;</button>
+            {{ message }}
+        </div>
+    {% endfor %}
+    <div class="page-header">
+        <h1>Hello, {{ name }}!</h1>
+    </div>
+</div>
+{% endblock %}

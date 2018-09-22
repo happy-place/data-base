@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+
+<property>
+    <name>hive.exec.compress.output</name>
+    <value>false</value>
+</property>
+        
+<property>
+	<name>hive.metastore.warehouse.dir</name>
+	<value>hdfs://localhost:9000/apps/hive/warehouse</value>
+</property>
+<property>
+	<name>hive.exec.scratchdir</name>
+	<value>hdfs://localhost:9000/tmp/hive</value>
+</property>
+
+<property>
+ 	<name>javax.jdo.option.ConnectionDriverName</name>
+ 	<value>com.mysql.jdbc.Driver</value>
+</property> 
+
+<property>
+	<name>javax.jdo.option.ConnectionURL</name>
+ 	<value>jdbc:mysql://localhost:3306/hive?createDatabaseIfNotExist=true</value>
+</property>
+
+
+<property>
+	<name>javax.jdo.option.ConnectionUserName</name>
+	<value>root</value>
+</property>
+
+<property>
+	<name>javax.jdo.option.ConnectionPassword</name>
+	<value>root</value>
+</property>
+
+ <!-- 显示表头-->
+  <property>
+          <name>hive.cli.print.header</name>
+          <value>true</value>
+  </property>
+ 
+  <!-- 显示库名 -->
+  <property>
+          <name>hive.cli.print.current.db</name>
+          <value>true</value>
+  </property>
+ 
+ <!-- hive远程访问代理服务uri集合--> 
+  <property>
+          <name>hive.metastore.uris</name>
+          <value>thrift://localhost:9083</value>
+  </property>
+ 
+ <!-- hive远程访问代理服务绑定端口 --> 
+  <property>
+          <name>hive.server2.thrift.port</name> 
+          <value>10000</value>
+  </property>
+ 
+    <!-- hive远程访问代理服务绑定主机 --> 
+  <property>
+        <name>hive.server2.thrift.bind.host</name> 
+    	<value>localhost</value>
+  </property>
+ 
+  <!-- hive远程访问代理服务超时-->
+  <property>
+        <name>hive.server2.long.polling.timeout</name> 
+  	<value>5000</value>
+  </property>
+
+</configuration>

@@ -1,0 +1,50 @@
+Hive框架基础（四）
+	理性认知：
+		* 商业网站中经常统计的数据有哪些
+			UV：独立访客
+				** 同一个用户访问多次会产生多个记录，但是这些记录会在运算的时候合并为1个
+				** 语法：count(distinct guid)
+			PV：页面浏览量
+				** 同一个用户访问多次，产生多条记录，每一条记录都是一次PV
+				** 语法：count(url)
+			登录人数：
+				** 登录网站访问的人数[普通会员，VIP，SVIP]
+				** endUserId标识会员
+			游客人数：
+				** 在没有登录的情况下访问的客户
+				** endUserId为空 --> ""/null
+			平均访问时长：
+				** 用户在网站停留的时间
+				** trackTime --> max - min
+			二跳率：
+				** 在同一个网站中平均浏览了2个以上的页面的用户
+				** 计算方法：(pv > 2) / 用户总数
+			独立IP：
+				** 客户的公网IP
+				** 正常情况下，分析一天内的数据，同一个用户的IP是不会变的
+				** 语法：cunt(distinct ip)
+			* 分析结果表的结构
+				键名				描述				对应track_log字段
+				session_id			会话id				sessionId
+				guid				访客id				guid
+				trackerU			访问去掉id，获取	trackerU
+									会话中的第一个
+				landing_url			着陆URL				url
+				landing_url_ref		着落之前的URL		referer
+				user_id				会员id				endUserId
+				pv
+				uv
+				stay_time			停留时间			trackTime
+				min_trackTime		最小时间
+				ip
+				provinceId			省份id				provinceId
+			* 分析步骤：
+				Step1、创建会话信息表：db_web_ana.session_info
+				Step2、创建临时表1：db_web_ana.session_info_temp1
+				Step3、分析数据并向临时表1：db_web_ana.session_info_temp1中插入数据
+				Step4、创建临时表2：db_web_ana.session_info_temp2
+				Step5、向临时表2：b_web_ana.session_info_temp2中插入数据
+				Step6、通过sessionId和trackTime将两张临时表join在一起后插入到会话信息表中：db_web_ana.session_info
+				Step7、分析需要统计的数据，设计最终结果表，并创建之
+					日期	UV       	PV 		登录人数 		游客人数 	平均访问时长 	二跳率 	独立IP
+				Step8、统计最终结果

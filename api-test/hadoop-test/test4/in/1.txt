@@ -1,0 +1,9 @@
+aa	1	2
+bb	2	1
+bb	2	2
+cc	4	3
+aa	1	2
+cc	4	4
+bb	2	5
+bb	3	1
+aa	1	2

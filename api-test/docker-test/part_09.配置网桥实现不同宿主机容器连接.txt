@@ -1,0 +1,227 @@
+1.使用网桥实现跨主机容器连接原理
+
+                   GateWay
+                   ↑    ↑
+    Host_1  ->   br0    br0  <- Host_2
+       Docker_1 _↑        ↑_ Docker_2
+             ↑               ↑
+         Container_1    Container_1
+                  ↑ _..._ ↑
+
+    特点：需要将宿主机网卡绑定到网桥，容器网段与宿主机网段一致，关联变得复杂。
+
+
+2.规划
+    两套宿主机环境
+        Host1 IP 172.16.32.100 Gateway 172.16.32.2
+        Host2 IP 172.16.32.101 Gateway 172.16.32.2
+
+    准备在宿主机上床架各自的网桥 br0 (注意网关与源宿主机网关一致)
+        Host1 br0 IP 172.16.32.25 Gateway 172.16.32.2
+        Host2 br0 IP 172.16.32.26 Gateway 172.16.32.2
+
+    将各宿主机的默认网卡 ifcfg-ens33 都绑定到各自的 br0 网桥
+
+    将各宿主机的 docker守护进程，绑定到 br0 宿主机的 br0 网桥，并限制方ip区段
+        Host1 docker .. "-b=br0 --fixed-cidr=172.16.32.64/26"  容器可使用区段 172.16.32.64~127
+        Host2 docker .. "-b=br0 --fixed-cidr=172.16.32.128/26" 容器可使用区段 172.16.32.128~191
+
+    重启各自 network 和 docker 进程，创建容器，测试联通性
+
+3.实际操作
+    HOST1 宿主机
+        # 通过配置，注册网桥 (注，网关必须与源宿主机网关一致)
+        vim /etc/sysconfig/network-scripts/ifcfg-br0
+        ---------------------------
+        TYPE=Bridge
+        DEVICE=br0
+        BOOTPROTO=static
+        ONBOOT=yes
+        IPADDR=172.16.32.25
+        NETMASK=255.255.255.0
+        GATEWAY=172.16.32.2
+        DNS1=114.114.114.114
+        ---------------------------
+
+        # 将宿主机默认网卡绑定到 br0网桥（注：必须在最后一行绑定）
+        vim /etc/sysconfig/network-scripts/ifcfg-ens33
+        ---------------------------
+        TYPE="Ethernet"
+        BOOTPROTO="static"
+        DEFROUTE="yes"
+        PEERDNS="yes"
+        PEERROUTES="yes"
+        IPV4_FAILURE_FATAL="no"
+        IPV6INIT="no"
+        IPV6_AUTOCONF="no"
+        IPV6_DEFROUTE="no"
+        IPV6_PEERDNS="no"
+        IPV6_PEERROUTES="no"
+        IPV6_FAILURE_FATAL="no"
+        IPV6_ADDR_GEN_MODE="stable-privacy"
+        NAME="ens33"
+        UUID="74cd0439-9ae7-4852-86b2-e8911ade8aa8"
+        DEVICE="ens33"
+        ONBOOT="yes"
+        NETMASK="255.255.255.0"
+        IPADDR="172.16.32.130"
+        GATEWAY="172.16.32.2"
+        DNS1="114.114.114.114"
+        DNS2="8.8.8.8"
+        BRIDGE=br0
+        ---------------------------
+
+        # 重启网络，此时 ens33 地址不见了，只显示br0网桥 IP
+        service network restart
+
+        ifconfig
+        br0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+                inet 172.16.32.25  netmask 255.255.255.0  broadcast 172.16.32.255
+                inet6 fe80::9c3f:cfff:fe32:6aca  prefixlen 64  scopeid 0x20<link>
+                ether 00:0c:29:5f:b2:c8  txqueuelen 1000  (Ethernet)
+                RX packets 285  bytes 23708 (23.1 KiB)
+                RX errors 0  dropped 0  overruns 0  frame 0
+                TX packets 280  bytes 27986 (27.3 KiB)
+                TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+        ens33: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+                ether 00:0c:29:5f:b2:c8  txqueuelen 1000  (Ethernet)  <<<< IP 不见了，说明成功绑定到了 br0
+                RX packets 874  bytes 80542 (78.6 KiB)
+                RX errors 0  dropped 0  overruns 0  frame 0
+                TX packets 300  bytes 31928 (31.1 KiB)
+                TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+        ping -c 3 www.baidu.com
+        PING www.a.shifen.com (61.135.169.121) 56(84) bytes of data.
+        64 bytes from 61.135.169.121 (61.135.169.121): icmp_seq=1 ttl=128 time=6.44 ms
+        64 bytes from 61.135.169.121 (61.135.169.121): icmp_seq=2 ttl=128 time=6.83 ms
+        64 bytes from 61.135.169.121 (61.135.169.121): icmp_seq=3 ttl=128 time=5.30 ms
+
+        # docker 守护进程绑定到 br0 网桥 (-b=br0 --fixed-cidr=172.16.32.64/26)
+        vim /etc/sysconfig/docker
+        ---------------------------
+        ...
+        OPTIONS='--label name=test_options1 -H tcp://0.0.0.0:2375 -H unix:///var/run/docker.sock -b=br0 --fixed-cidr=172.16.32.64/26'
+        ...
+        ---------------------------
+
+        # 重启docker守护进程 (发现启动参数已生效)
+        service docker restart
+
+        ps -ef | grep docker
+        root       3461      1  0 Sep14 ?        00:00:02 /usr/bin/dockerd-current ... -b=br0 --fixed-cidr=172.16.32.64/26 --storage-driver overlay2
+
+        # 创建容器
+        docker run -it --name b1 docker.io/ubuntu:14.04 /bin/bash
+        oot@90b3621cdb98:/# ifconfig
+        eth0      Link encap:Ethernet  HWaddr 02:42:ac:10:20:40
+                  inet addr:172.16.32.64  Bcast:0.0.0.0  Mask:255.255.255.0  <<<
+                  inet6 addr: fe80::42:acff:fe10:2040/64 Scope:Link
+
+
+    HOST2 宿主机
+        # 通过配置，注册网桥 (注，网关必须与源宿主机网关一致)
+                vim /etc/sysconfig/network-scripts/ifcfg-br0
+                ---------------------------
+                TYPE=Bridge
+                DEVICE=br0
+                BOOTPROTO=static
+                ONBOOT=yes
+                IPADDR=172.16.32.26
+                NETMASK=255.255.255.0
+                GATEWAY=172.16.32.2
+                DNS1=114.114.114.114
+                ---------------------------
+
+                # 将宿主机默认网卡绑定到 br0网桥（注：必须在最后一行绑定）
+                vim /etc/sysconfig/network-scripts/ifcfg-ens33
+                ---------------------------
+                TYPE="Ethernet"
+                BOOTPROTO="static"
+                DEFROUTE="yes"
+                PEERDNS="yes"
+                PEERROUTES="yes"
+                IPV4_FAILURE_FATAL="no"
+                IPV6INIT="no"
+                IPV6_AUTOCONF="no"
+                IPV6_DEFROUTE="no"
+                IPV6_PEERDNS="no"
+                IPV6_PEERROUTES="no"
+                IPV6_FAILURE_FATAL="no"
+                IPV6_ADDR_GEN_MODE="stable-privacy"
+                NAME="ens33"
+                UUID="74cd0439-9ae7-4852-86b2-e8911ade8aa8"
+                DEVICE="ens33"
+                ONBOOT="yes"
+                NETMASK="255.255.255.0"
+                IPADDR="172.16.32.130"
+                GATEWAY="172.16.32.2"
+                DNS1="114.114.114.114"
+                DNS2="8.8.8.8"
+                BRIDGE=br0
+                ---------------------------
+
+                # 重启网络，此时 ens33 地址不见了，只显示br0网桥 IP
+                service network restart
+
+                ifconfig
+                br0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+                        inet 172.16.32.26  netmask 255.255.255.0  broadcast 172.16.32.255
+                        inet6 fe80::9c3f:cfff:fe32:6aca  prefixlen 64  scopeid 0x20<link>
+                        ether 00:0c:29:5f:b2:c8  txqueuelen 1000  (Ethernet)
+                        RX packets 285  bytes 23708 (23.1 KiB)
+                        RX errors 0  dropped 0  overruns 0  frame 0
+                        TX packets 280  bytes 27986 (27.3 KiB)
+                        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+                ens33: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+                        ether 00:0c:29:5f:b2:c8  txqueuelen 1000  (Ethernet)  <<<< IP 不见了，说明成功绑定到了 br0
+                        RX packets 874  bytes 80542 (78.6 KiB)
+                        RX errors 0  dropped 0  overruns 0  frame 0
+                        TX packets 300  bytes 31928 (31.1 KiB)
+                        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+                ping -c 3 www.baidu.com
+                PING www.a.shifen.com (61.135.169.121) 56(84) bytes of data.
+                64 bytes from 61.135.169.121 (61.135.169.121): icmp_seq=1 ttl=128 time=6.44 ms
+                64 bytes from 61.135.169.121 (61.135.169.121): icmp_seq=2 ttl=128 time=6.83 ms
+                64 bytes from 61.135.169.121 (61.135.169.121): icmp_seq=3 ttl=128 time=5.30 ms
+
+                # docker 守护进程绑定到 br0 网桥 (-b=br0 --fixed-cidr=172.16.32.64/26)
+                vim /etc/sysconfig/docker
+                ---------------------------
+                ...
+                OPTIONS='--label name=test_options1 -H tcp://0.0.0.0:2375 -H unix:///var/run/docker.sock -b=br0 --fixed-cidr=172.16.32.128/26'
+                ...
+                ---------------------------
+
+                # 重启docker守护进程 (发现启动参数已生效)
+                service docker restart
+
+                ps -ef | grep docker
+                root       3461      1  0 Sep14 ?        00:00:02 /usr/bin/dockerd-current ... -b=br0 --fixed-cidr=172.16.32.128/26 --storage-driver overlay2
+
+                # 创建容器
+                docker run -it --name b1 docker.io/ubuntu:14.04 /bin/bash
+                root@90b3621cdb98:/# ifconfig
+                eth0      Link encap:Ethernet  HWaddr 02:42:ac:10:20:40
+                          inet addr:172.16.32.128  Bcast:0.0.0.0  Mask:255.255.255.0  <<<
+                          inet6 addr: fe80::42:acff:fe10:2040/64 Scope:Link
+
+
+                root@90b3621cdb98:/# ping -c 3 172.16.32.64
+                PING 172.16.32.64 (172.16.32.64) 56(84) bytes of data.
+                64 bytes from 172.16.32.64: icmp_seq=1 ttl=64 time=0.506 ms
+                64 bytes from 172.16.32.64: icmp_seq=2 ttl=64 time=0.673 ms
+                64 bytes from 172.16.32.64: icmp_seq=3 ttl=64 time=0.584 ms
+
+                # 同理 从 172.16.32.64 ping 172.16.32.128
+                PING 172.16.32.128 (172.16.32.128) 56(84) bytes of data.
+                64 bytes from 172.16.32.128: icmp_seq=1 ttl=64 time=0.961 ms
+                64 bytes from 172.16.32.128: icmp_seq=2 ttl=64 time=0.646 ms
+                64 bytes from 172.16.32.128: icmp_seq=3 ttl=64 time=0.577 ms
+                64 bytes from 172.16.32.128: icmp_seq=4 ttl=64 time=0.656 ms
+
+
+
+

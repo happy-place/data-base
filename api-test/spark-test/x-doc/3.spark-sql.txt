@@ -1,0 +1,792 @@
+1.spark-sql 特点：
+    易整合
+    统一的数据访问方式
+    兼容hive
+    标准数据连接
+
+2.RDD，DataFrame,DataSet 特点：
+    RDD
+    RDD 是一个懒执行的不可变的，支持lambda 表达式的并行数据集合
+    最显著特点就是简单，高度人性化API
+    劣势在于性能限制，RDD是一个JVM常驻内存对象，因此存储在GC限制，数据增量时Java序列化成本增加；
+
+    DataFrame
+    与RDD类似，是一个分布式数据容器，类似于 传统数据库的二维表格。完全兼容RDD算子同时，具备其他更为丰富的算子，使用DataFrame 能够显著提升
+    执行效率，减少数据读取，以及执行计划优化特点。并且额外提供了视图功能。
+    DataFrame 执行效率比RDD高的原因是：1.使用 非堆内存 OFF_HEAP(不使用 JVM 内存，而是直接使用机器内存)。2.内部自动 通过spark catalyst optimiser
+    对查询计划进行优化。（如filter下推）
+    不足之处在于编译期缺少类型安全检查，容易导致运行期出错。
+
+    DataSet
+    基于DataFrame API 扩展的最新数据集，即具备DataFrame 丰富查询算子，灵活查询功能，高效的查询效率，有具备类型安全检查；
+    Dataset 还支持编解码器，当需要访问非堆内存数据时可以避免序列化性能开销，提高查询效率；
+    通常采用样例类定义Dataset的数据结构信息，样例类的每个属性直接映射到Dataset字段上；
+    DateFrame 可以看出 Dataset[Row] 类型
+
+3.三者区别
+    RDD: 一般和 spark mlib 同时使用 不支持spark-sql操作
+
+    Dataframe:
+        1、可以看成每一行固定为Row类型的Dataset[Row],只能通过解析才能回去个字段的数值。
+        2、Dataframe与Dataset 一般与spark ml 一起使用，均支持spark-sql操作，还能支持 注册临时表/视窗操作。
+        3、Dataframe 与 Dataset 支持一些特别大的保存方式如：保存成为csv 格式，可带上表头。
+
+    Dataset:
+        1.与Dataframe 拥有完全相同的成员函数，区别在于Dataset 每一行的数据类型时组织过的；
+        2.Dataset 相较于Dataframe 有类型检查，因此访问字段非常方便。
+
+4.RDD，DataFrame,DataSet 创建，转换
+    1）rdd 创建
+     val sparkconf = new SparkConf().setMaster("local").setAppName("test").set("spark.port.maxRetries","1000")
+     val sc = spark.sparkContext
+     // 基于集合创建
+     val rdd = sc.parallelize(Seq(("a", 1), ("b", 2), ("a", 3)))
+     val rdd2 = sc.makeRDD(Seq(("a", 1), ("b", 2), ("a", 3)))
+
+     // 基于外部数据源创建
+     val rdd1 = sc.textFile("hdfs://localhost:9000/tmp/spark/in/txt")
+     rdd1.saveAsTextFile("hdfs://localhost:9000/tmp/spark/out/text" /*,classOf[com.hadoop.compression.lzo.LzopCodec]*/)
+
+     val rdd1 = sc.sequenceFile("hdfs://localhost:9000/tmp/spark/out/seq",classOf[String],classOf[String])
+     rdd1.saveAsSequenceFile("hdfs://localhost:9000/tmp/spark/out/seq") // KV 必须是可 hash 对象，Char 不允许使用
+
+     val rdd1 = sc.objectFile("hdfs://localhost:9000/tmp/spark/out/obj")
+     rdd1.saveAsObjectFile("hdfs://localhost:9000/tmp/spark/out/obj")
+
+     val rdd1 = sc.newAPIHadoopFile("hdfs://localhost:9000/tmp/spark/out/hadoop",classOf[KeyValueTextInputFormat],classOf[Text],classOf[Text])
+     rdd1.saveAsNewAPIHadoopFile("hdfs://localhost:9000/tmp/spark/out/hadoop",
+              classOf[LongWritable],
+              classOf[Text],
+              classOf[org.apache.hadoop.mapreduce.lib.output.TextOutputFormat[LongWritable,Text]])
+
+     注：textFile，sequenceFile，objectFile 底层基石是newAPIHadoopFile。
+
+     val rdd1 = new JdbcRDD(
+            sc,
+            getConnection = ()=>{
+              Class.forName("com.mysql.jdbc.Driver").newInstance()
+              java.sql.DriverManager.getConnection("jdbc:mysql://localhost:3306/test","root","root")
+            },
+            sql="select * from staff where id >=? and id <=?",
+            lowerBound=1,
+            upperBound=10,
+            numPartitions=2,
+            mapRow = r=>(r.getInt(1),r.getString(2),r.getString(3))
+          )
+     rdd1.map{case(id,name,gender) => (id+20,name.toUpperCase,gender)}.foreachPartition{ it =>
+          val getConnection = ()=>{
+             Class.forName("com.mysql.jdbc.Driver").newInstance()
+             java.sql.DriverManager.getConnection("jdbc:mysql://localhost:3306/test","root","root")
+           }
+
+           val conn = getConnection()
+           conn.setAutoCommit(false)
+           val statement = conn.createStatement()
+           it.foreach(row =>
+           row match {
+             case (id,name,gender)=>{
+               statement.addBatch(s"insert into staff values($id,'$name','$gender')")
+             }
+           })
+           statement.executeBatch()
+           conn.commit()
+     }
+
+    // 基于其他rdd ，df, ds 转换得到
+    val rdd2 = rdd1.map(_._1)
+    import spark.implicits._
+    df.rdd
+    ds.rdd
+
+    // 属性提取
+    val rdd=sc.parallelize(Seq(("a", 1), ("b", 2), ("a", 3)))
+    // transform 算子中的打印输出必须配合 action 算子才会执行
+    rdd1.map{case (a:String,b:Int) => println(s"$a , $b"); (a,b)}.count() // 模式匹配方式提取属性
+    rdd1.map{t => println(t._1,t._2); t }.count() // 取下标方式提取属性
+    rdd.foreach{case (a:String,b:Int) => println(s"$a : $b")} // action 算则
+
+    // 缓存方式
+    rdd.cache() 等价于
+    rdd.persist(StorageLevel.MEMORY_ONLY)
+    rdd.unpersist() // 是否缓存
+
+
+    2）DataFrame 的创建
+    // 基于 rdd 转换得到
+    val sparkconf = new SparkConf().setMaster("local").setAppName("test").set("spark.port.maxRetries","1000")
+    val spark = SparkSession.builder().config(sparkconf).getOrCreate()
+
+    val sc = spark.sparkContext
+    val catalog = spark.catalog
+
+    import spark.implicits._
+
+    val rdd=sc.parallelize(Seq(("a", 1), ("b", 1), ("a", 1)))
+
+    rdd.map{line=>(line._1,line._2)}
+    val df = rdd.toDF("name","age")
+    val df = rdd.toDF().withColumnRenamed("_1","name").withColumnRenamed("_2","age")
+
+    // 基于Dataset 转换得到
+    val df = ds.toDF("name","age")
+    val df = ds.toDF().withColumnRenamed("_1","name").withColumnRenamed("_2","age")
+
+    // 基于外部数据源创建
+    /* tsv/csv
+    SaveMode 》 Append 追加, Overwrite覆盖,ErrorIfExists如果存在就报错,Ignore 如果数据存在就忽略;
+      name    age            name    age
+      a       3      ---->   a       3
+      name    age    ---->   b       2
+      b       2
+
+      json
+      {"name":"Michael"}
+      {"name":"Andy", "age":30}
+      {"name":"Justin", "age":19}
+    */
+    val writeOptions = Map("header"->"true","delimiter"->"\t","path"->"hdfs://localhost:9000/tmp/spark/df/out/tsv")
+    val df = spark.read.format("csv").options(writeOptions).load()
+    val readOptions = Map("header"->"true","delimiter"->"\t","path"->"hdfs://localhost:9000/tmp/spark/df/in/tsv")
+    df.write.format("csv").mode(SaveMode.Overwrite).options(readOptions).save()
+
+    val df = spark.read.json("hdfs://localhost:9000/tmp/sparl/df/in/json/people.json")
+    df.write.format("json").save("hdfs://localhost:9000/tmp/sparl/df/out/json")
+
+    // 通过编程设置 schema 方式创建 dataframe
+      val rdd121 = sc.textFile("hdfs://localhost:9000/tmp/spark/in/txt")
+                  .map{ line =>
+                    val data = line.split("\t")
+                    Row(data(0),data(1).toInt)
+                  }
+
+        // schema 方式创建 df
+        val fields = List("name", "age").map{
+          case "name" => StructField("name", StringType, nullable = true)
+          case "age" => StructField("age", IntegerType, nullable = true)
+        }
+
+        val schema = StructType(fields)
+
+       // 注 RDD 的数据类型 必须 与 schema 严格一致
+      val df121 = spark.createDataFrame(rdd121,schema)
+
+    // 属性提取
+    // dataframe 原生算子
+     df.select("name","age").show()
+     df.select(($"name").alias("myName") , $"age" +1).show() // 参与运算 可使用 EL 表达式
+     // 借助 Row 提取属性
+     df.map{
+        case Row(name:String,age:Int) => (name,age)
+     }.show()
+
+
+    // 注册临时视图 (只读当前session 有效)
+     df.createOrReplaceTempView("df")
+     val df2 = spark.sql("select name,age from globalDF where age >1 order by age desc")
+
+    // 注册全局视图 （对当前session 和 其子session 均有效，通过 global_temp.view_name 提取视图）
+     df.createGlobalTempView("globalDF")
+     val df22 = spark.sql("select name,age from global_temp.globalDF where age >1 order by age desc")
+     val rdd23= spark.newSession().sql("select name,age from global_temp.globalDF where age >1 order by age desc")
+
+    // 预先定义 ColList 批量提取
+     val df4 = spark.read.json("hdfs://localhost:9000/tmp/sparl/df/in/json/people.json")
+     implicit val mapEncoder = org.apache.spark.sql.Encoders.kryo[Map[String,Any]]
+
+     df4.map(person=> person.getValuesMap[Any](List("name","age"))).show()
+        /*
+        +--------------------+
+        |               value|
+        +--------------------+
+        |[2E 01 02 39 01 0...|
+        |[2E 01 02 39 01 0...|
+        |[2E 01 02 39 01 0...|
+        +--------------------+
+         */
+      df4.map(person=> person.getValuesMap[Any](List("name","age"))).collect()
+        /*
+        Array(Map(name -> Michael, age -> null), Map(name -> Andy, age -> 30), Map(name -> Justin, age -> 19))
+         */
+
+    // 缓存方式
+    // 缓存df
+    df4.cache()
+    df4.persist(StorageLevel.MEMORY_ONLY)
+    df4.unpersist() // 解除缓存
+
+    // 缓存视图
+    if (!catalog.isCached("df")){
+      println("cache df")
+      catalog.cacheTable("df")
+    }
+
+    if (catalog.isCached("df")){
+      println("unpersist df")
+      catalog.dropTempView("df")  // 释放缓存
+    }
+
+    3) Dataset 创建
+    // 基于 rdd 转换得到
+    case class Person(name:String,age:Int)
+
+    val sparkconf = new SparkConf().setMaster("local").setAppName("test").set("spark.port.maxRetries","1000")
+    val spark = SparkSession.builder().config(sparkconf).getOrCreate()
+    val sc = spark.sparkContext
+
+    import spark.implicits._
+
+    val rdd=sc.parallelize(Seq(("a", 1), ("b", 1), ("a", 1)))
+    rdd.map{case (name:String,age:Int) => Person(name,age)}.toDS()
+
+    // 基于 dataframe 转换得到
+    val df11 = rdd.map{case (name:String,age:Int) => (name,age)}.toDF("name","age").as[Person]
+
+    // 基于集合创建
+    val strDS = spark.createDataset(Seq(Person("Gin",22),Person("Gin",22),Person("Zin",32)))
+
+5.自定义UDF函数
+    1）简单 udf 函数
+    val sparkconf = new SparkConf().setMaster("local").setAppName("test").set("spark.port.maxRetries","1000")
+
+    val spark = SparkSession.builder().config(sparkconf).getOrCreate()
+    val sc = spark.sparkContext
+
+    try{
+        spark.udf.register("toUpper",(x:String)=>x.toUpperCase())
+        val df = spark.read.json("hdfs://localhost:9000/tmp/sparl/df/in/json/people.json")
+        df.createOrReplaceTempView("people")
+
+        val df2 = spark.sql("select toUpper(name),age from people")
+        df2.show()
+    }finally {
+        spark.stop()
+    }
+
+    2）弱类型 UDAF (行转列) 聚合函数，给 DataFrame 使用
+    import org.apache.spark.SparkConf
+    import org.apache.spark.sql.expressions.MutableAggregationBuffer
+    import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
+    import org.apache.spark.sql.types._
+    import org.apache.spark.sql.Row
+    import org.apache.spark.sql.SparkSession
+
+    object WeakTypeUDFAverage extends UserDefinedAggregateFunction {
+      // 聚合函数 入参类型
+      def inputSchema: StructType = StructType(StructField("inputColumn", DoubleType) :: Nil)
+      // 聚合函数完成计算需要的 缓冲区
+      def bufferSchema: StructType = {
+        StructType(StructField("sum", DoubleType) :: StructField("count", LongType) :: Nil)
+      }
+      // 返回值的数据类型
+      def dataType: DataType = DoubleType
+      // 对于相同的输入是否一直返回相同的输出。
+      def deterministic: Boolean = true
+      // 初始化
+      def initialize(buffer: MutableAggregationBuffer): Unit = {
+        // 存工资的总额
+        buffer(0) = 0D
+        // 存工资的个数
+        buffer(1) = 0L
+      }
+      // 相同Executor间的数据合并。
+      def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
+        if (!input.isNullAt(0)) {
+          buffer(0) = buffer.getDouble(0) + input.getDouble(0)
+          buffer(1) = buffer.getLong(1) + 1
+        }
+      }
+      // 不同Executor间的数据合并
+      def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
+        buffer1(0) = buffer1.getDouble(0) + buffer2.getDouble(0)
+        buffer1(1) = buffer1.getLong(1) + buffer2.getLong(1)
+      }
+      // 计算最终结果
+      def evaluate(buffer: Row): Double = buffer.getDouble(0) / buffer.getLong(1)
+    }
+
+    object WeakTypeUDFAverageTest extends App{
+
+      val sparkconf = new SparkConf().setMaster("local").setAppName("test").set("spark.port.maxRetries","1000")
+
+      val spark = SparkSession.builder().config(sparkconf).getOrCreate()
+
+      // 注册函数
+      spark.udf.register("WeakTypeUDFAverage", WeakTypeUDFAverage)
+
+      val df = spark.read.json("hdfs://localhost:9000/tmp/sparl/df/in/json/employee.json")
+      df.createOrReplaceTempView("employees")
+      df.show()
+      // +-------+------+
+      // |   name|salary|
+      // +-------+------+
+      // |Michael|  3000|
+      // |   Andy|  4500|
+      // | Justin|  3500|
+      // |  Berta|  4000|
+      // +-------+------+
+
+      val result = spark.sql("SELECT WeakTypeUDFAverage(salary) as average_salary FROM employees")
+      result.show()
+      // +--------------+
+      // |average_salary|
+      // +--------------+
+      // |        3750.0|
+      // +--------------+
+
+    }
+
+    3) 强类型 UDAF 函数，给 Dataset 使用
+    import org.apache.spark.SparkConf
+    import org.apache.spark.sql.expressions.Aggregator
+    import org.apache.spark.sql.Encoder
+    import org.apache.spark.sql.Encoders
+    import org.apache.spark.sql.SparkSession
+
+    // UDF 函数入参类型
+    case class Employee(name: String, salary: Double)
+    // UDF 函数中间计算需要用到的 缓冲数据结构
+    case class Average(var sum: Double, var count: Long)
+
+    // Aggregator[Employee, Average, Double] Double 为最终输出结果类型
+    object StrongTypeUDFAverage extends Aggregator[Employee, Average, Double] {
+      // 定义一个数据结构，保存工资总数和工资总个数，初始都为0
+      def zero: Average = Average(0, 0L)
+
+      // 分区内部累加
+      def reduce(buffer: Average, employee: Employee): Average = {
+        buffer.sum += employee.salary
+        buffer.count += 1
+        buffer
+      }
+
+      // 分区间聚合
+      def merge(b1: Average, b2: Average): Average = {
+        b1.sum += b2.sum
+        b1.count += b2.count
+        b1
+      }
+
+      // 计算输出
+      def finish(reduction: Average): Double = reduction.sum / reduction.count
+
+      // 设定之间值类型的编码器，要转换成case类
+      // Encoders.product是进行scala元组和case类转换的编码器
+      def bufferEncoder: Encoder[Average] = Encoders.product
+
+      // 设定最终输出值的编码器
+      def outputEncoder: Encoder[Double] = Encoders.scalaDouble
+    }
+
+    object StrongTypeUDFAverageTest extends App {
+
+      val sparkconf = new SparkConf().setMaster("local").setAppName("test").set("spark.port.maxRetries","1000")
+
+      val spark = SparkSession.builder().config(sparkconf).getOrCreate()
+
+      import spark.implicits._
+
+      val ds = spark.read.json("hdfs://localhost:9000/tmp/sparl/df/in/json/employee.json").as[Employee]
+      ds.show()
+
+      // 注册UDF 输出 结果的 别名
+      val averageSalary = StrongTypeUDFAverage.toColumn.name("average_salary")
+      val result = ds.select(averageSalary)
+      result.show()
+
+    }
+
+6.spark-sql数据源支持
+    1.默认为parquet格式，read write 明确指定format 类型，时按 parquet 处理 (先分块，再按列存储)
+    val saveOptions = Map("header"->"true","delimiter"->"\t","path"->"hdfs://localhost:9000/tmp/spark/df/out/tsv")
+    df2.write.mode(SaveMode.Overwrite).options(saveOptions).save()  // 存储为 parquet 格式
+    df2.write.format("csv").mode(SaveMode.Overwrite).options(saveOptions).save() // 存储为 tsv 格式
+    或
+    df2.write.format("org.apache.spark.sql.csv").mode(SaveMode.Overwrite).options(saveOptions).save() // 存储为 tsv 格式
+
+    注：非默认数据源，通过 format("csv") 或 format("org.apache.spark.sql.csv") 定义。其余数据源简称还有 json, parquet, jdbc, orc, libsvm, csv, text 等。
+
+    2.修改默认数据源格式
+    val sparkconf = new SparkConf().setMaster("local").setAppName("test").set("spark.sql.sources.default","json")
+
+7.spark-sql 直接基于hdfs 文件创建rdd
+    spark.sql("select * from parquet.`hdfs://localhost:9000/tmp/spark/df/out/tsv/*.parquet`").show()
+    spark.sql("select * from json.`hdfs://localhost:9000/tmp/sparl/df/in/json/people.json`").show()
+
+8.Parquet 存储格式
+    Paquet 是一种流行的列式存储格式，可以高效存储具有嵌套字段的记录。其余hadoop生态圈高度兼容。
+    对表进行分区是对数据进行优化的重要方式之一，在分区表内，数据通过分区列将数据存储在不同目录执行。Parquet 可以自动发现并解析分区信息。
+    spark.sql.sources.partitionColumnTypeInference.enabled，默认值为true 控制着表的分区自解析功能。
+
+    spark.read.parquet("hdfs://localhost:9000/tmp/spark/df/out/parquet").show
+    df2.write.parquet("hdfs://localhost:9000/tmp/spark/df/out/parquet")
+
+    parquet 源的分区的 schema 合并 (spark.sql.parquet.mergeSchema 默认true)
+
+    val sparkconf = new SparkConf().setMaster("local").setAppName("test").set("spark.port.maxRetries","1000")
+
+    val spark = SparkSession.builder().config(sparkconf).getOrCreate()
+    val sc = spark.sparkContext
+
+    import spark.implicits._
+
+    val df1 = sc.makeRDD(1 to 5).map(i => (i, i * 2)).toDF("single", "double")
+
+    var rmCode = "hdfs dfs -rmr -skipTrash /tmp/spark/out/parquet/test_table/key=1"!
+
+    df1.write.parquet("hdfs://localhost:9000/tmp/spark/out/parquet/test_table/key=1")
+
+    // Create another DataFrame in a new partition directory,
+    // adding a new column and dropping an existing column
+    val df2 = sc.makeRDD(6 to 10).map(i => (i, i * 3)).toDF("single", "triple")
+
+    rmCode = "hdfs dfs -rmr -skipTrash /tmp/spark/out/parquet/test_table/key=2"!
+
+    df2.write.parquet("hdfs://localhost:9000/tmp/spark/out/parquet/test_table/key=2")
+
+    // Read the partitioned table
+    val df3 = spark.read.option("mergeSchema", "true").parquet("hdfs://localhost:9000/tmp/spark/out/parquet/test_table")
+    df3.printSchema()
+    /*
+        root
+         |-- single: integer (nullable = true)
+         |-- double: integer (nullable = true)
+         |-- triple: integer (nullable = true)
+         |-- key: integer (nullable = true)
+    */
+
+    df3.show()
+    /*
+        +------+------+------+---+
+        |single|double|triple|key|
+        +------+------+------+---+
+        |     6|  null|    18|  2|
+        |     7|  null|    21|  2|
+        |     8|  null|    24|  2|
+        |     9|  null|    27|  2|
+        |    10|  null|    30|  2|
+        |     1|     2|  null|  1|
+        |     2|     4|  null|  1|
+        |     3|     6|  null|  1|
+        |     4|     8|  null|  1|
+        |     5|    10|  null|  1|
+        +------+------+------+---+
+    */
+
+9.与 hive 集成
+    1）.使用内置 hive, 即直接运行 spark-sql，则在 启动命令的 目录下回生成  derby.log, metastore_db 这两份数据，如果 $SPARK_HOME/conf
+    目录下没有配置 hdfs-site.xml ，则直接在当前文件系统 创建 /usr/hive/warehouse 目录，作为hive 根路径。如果配置了，就将 hdfs 作为默认文件系统。
+    注：在项目运行时，默认会在项目根路径下 data-base 创建 元数据目录 metastore_db 文件，通过指定 spark.sql.warehouse.dir 定义 数据文件存储目录
+    // warehouseLocation points to the default location for managed databases and tables
+      val warehouseLocation = new File("api-test/spark-test/spark-dataframe/spark-warehouse").getAbsolutePath
+
+      val spark = SparkSession
+        .builder()
+        .appName("Spark Hive Example")
+        .master("local[*]")
+        .config("spark.sql.warehouse.dir", warehouseLocation)
+        .enableHiveSupport()
+        .getOrCreate()
+
+      import spark.implicits._
+      import spark.sql
+
+      try{
+        // 数据重跑初始化
+        sql("drop table if exists src")
+        // 必须指定 分隔符，默认分隔符为 ','
+        sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\\t'")
+        sql("LOAD DATA LOCAL INPATH '/Users/huhao/software/idea_proj/data-base/api-test/spark-test/spark-dataframe/src/main/resources/kv1.txt' INTO TABLE src")
+
+        // Queries are expressed in HiveQL
+        sql("SELECT * FROM src").show()
+        // +---+-------+
+        // |key|  value|
+        // +---+-------+
+        // |238|val_238|
+        // | 86| val_86|
+        // |311|val_311|
+        // ...
+
+        // Aggregation queries are also supported.
+        sql("SELECT COUNT(*) FROM src").show()
+        // +--------+
+        // |count(1)|
+        // +--------+
+        // |    500 |
+        // +--------+
+
+        // The results of SQL queries are themselves DataFrames and support all normal functions.
+        val sqlDF = sql("SELECT key, value FROM src WHERE key < 10 ORDER BY key")
+
+        // The items in DataFrames are of type Row, which allows you to access each column by ordinal.
+        val stringsDS = sqlDF.map {
+          case Row(key: Int, value: String) => s"Key: $key, Value: $value"
+        }
+        stringsDS.show()
+        // +--------------------+
+        // |               value|
+        // +--------------------+
+        // |Key: 0, Value: val_0|
+        // |Key: 0, Value: val_0|
+        // |Key: 0, Value: val_0|
+        // ...
+
+        // You can also use DataFrames to create temporary views within a SparkSession.
+        val recordsDF = spark.createDataFrame((1 to 100).map(i => Record(i, s"val_$i")))
+        recordsDF.createOrReplaceTempView("records")
+
+        // Queries can then join DataFrame data with data stored in Hive.
+        sql("SELECT * FROM records r JOIN src s ON r.key = s.key").show() // 内连接
+        // +---+------+---+------+
+        // |key| value|key| value|
+        // +---+------+---+------+
+        // |  2| val_2|  2| val_2|
+        // |  4| val_4|  4| val_4|
+        // |  5| val_5|  5| val_5|
+        // ...
+
+    2）.元数据交给 data-base 本地的 metastore_db, 数据存储交给 hdfs
+        a.拷贝 core-site.xml 到 resource 路径，启动 hdfs
+
+        b.删除 原来的metastore_db 和 sparl-warehouse 目录
+
+        c.再次运行程序
+
+
+
+    3）.元数据交给 metastore_db 外置 hive ,数据存储 warehouse 交给 hive 配置的 hdfs 文件系统
+        a.拷贝 hive-site.xml 到 resource 路径，启动 hiveserver2
+            huhao:hive-1.2.2 huhao$ hs2_info.sh
+
+            ---------- start hiveserver2 ----------
+            nohup hive --service metastore 2>&1 &
+            nohup hive --service hiveserver2 2>&1 &
+
+            ---------- stop hiveserver2 ------------
+            ps -ef  | grep hiveserver2 | grep -v 'grep' |awk -F' ' '{print $2}' | xargs kill
+            ps -ef  | grep metastore | grep -v 'grep' |awk -F' ' '{print $2}' | xargs kill
+
+            ----------- beeline --------------
+            beeline -u jdbc:hive2://localhost:10000 -n "huhao" -p "huhao"
+
+        b.删除 data-base 项目根路径下的 metastore_db，已经项目中已经创建好的 spark-warehouse
+            再次运行程序
+            0: jdbc:hive2://localhost:10000> show tables;
+            +-------------------+--+
+            |     tab_name      |
+            +-------------------+--+
+            | bucketed_user     |
+            | company_info      |
+            | movie_info        |
+            | music             |
+            | music2            |
+            | person_info       |
+            | src               |
+            | youtube_category  |
+            | youtube_orc       |
+            | youtube_ori       |
+            | youtube_user_orc  |
+            | youtube_user_ori  |
+            +-------------------+--+
+            12 rows selected (0.083 seconds)
+            0: jdbc:hive2://localhost:10000> select * from src;
+            +----------+------------+--+
+            | src.key  | src.value  |
+            +----------+------------+--+
+            | 0        | val_0      |
+            | 1        | val_1      |
+            | 2        | val_2      |
+            | 3        | val_3      |
+            。。。。。。。。。。。。。。。。
+
+10.spark-shell 访问外部 hive
+    cp $HIVE_HOME/conf/hive-site.xml $SPARK_HOME/conf/
+    spark-shell --master yarn
+    import spark.sql
+    sql("select * from company_info")
+
+    scala> import spark.sql
+    import spark.sql
+
+    scala> sql("select * from company_info").show
+    +--------+-------+-------+
+    |personid|company|money  |
+    +--------+-------+-------+
+    |      p1|    公司1|100.0 |
+    |      p2|    公司2|200.0 |
+    |      p1|    公司3|150.0 |
+    |      p3|    公司4|300.0 |
+    +--------+-------+-------+
+
+    spark-sql --master yarn
+    spark-sql (default)> select * from company_info;
+    ---------------------------------------------
+    personid        company money
+    p1      公司1   100.0
+    p2      公司2   200.0
+    p1      公司3   150.0
+    p3      公司4   300.0
+    Time taken: 8.749 seconds, Fetched 4 row(s)
+    ---------------------------------------------
+
+11.JDBC 整合
+     <dependency>
+                <groupId>mysql</groupId>
+                <artifactId>mysql-connector-java</artifactId>
+                <version>5.1.39</version>
+                <!--<scope>provided</scope>-->
+     </dependency>
+ val sparkconf = new SparkConf().setMaster("local").setAppName("test").set("spark.port.maxRetries","1000")
+
+  val spark = SparkSession.builder().config(sparkconf).getOrCreate()
+  val sc = spark.sparkContext
+
+  // Note: JDBC loading and saving can be achieved via either the load/save or jdbc methods
+  // Loading data from a JDBC source
+  val jdbcDF = spark.read.format("jdbc")
+                    .option("url", "jdbc:mysql://localhost:3306/recommend")
+                    .option("dbtable", " Movie")
+                    .option("user", "root")
+                    .option("password", "root")
+                    .load()
+
+  println(jdbcDF.count())
+
+  val connectionProperties = new Properties()
+  connectionProperties.put("user", "root")
+  connectionProperties.put("password", "root")
+  val jdbcDF2 = spark.read.jdbc("jdbc:mysql://localhost:3306/recommend", "UserRecs", connectionProperties)
+
+  // Saving data to a JDBC source
+  // create table test.Movie like recommend.Movie
+  jdbcDF.repartition(1).write
+    .format("jdbc")
+    .option("url", "jdbc:mysql://localhost:3306/test")
+    .option("dbtable", "Movie")
+    .option("user", "root")
+    .option("password", "root")
+    .save()
+
+  jdbcDF2.repartition(1).write.jdbc("jdbc:mysql://localhost:3306/test", "UserRecs", connectionProperties)
+
+  println(jdbcDF2.count())
+
+  // Specifying create table column data types on write
+  //  jdbcDF.write.option("createTableColumnTypes", "name CHAR(64), comments VARCHAR(1024)")
+  //  .jdbc("jdbc:mysql://localhost:3306/test", "Movie2", connectionProperties)
+
+  jdbcDF.write.option("createTableColumnTypes", "`mid` int(11) DEFAULT NULL")
+    .option("createTableColumnTypes", "`name` text COLLATE utf8_bin")
+    .option("createTableColumnTypes", "`descri` text COLLATE utf8_bin")
+    .option("createTableColumnTypes", "`timelong` text COLLATE utf8_bin")
+    .option("createTableColumnTypes", "`issue` text COLLATE utf8_bin")
+    .option("createTableColumnTypes", "`shoot` text COLLATE utf8_bin")
+    .option("createTableColumnTypes", "`language` text COLLATE utf8_bin")
+    .option("createTableColumnTypes", "`genres` text COLLATE utf8_bin")
+    .option("createTableColumnTypes", "`actors` text COLLATE utf8_bin")
+    .option("createTableColumnTypes", "`directors` text COLLATE utf8_bin")
+    .jdbc("jdbc:mysql://localhost:3306/test", "Movie3", connectionProperties)
+
+12. SparkSQL 与 Hive 集成
+/*
+   *  1. sparkSQL创建SparkSession对象时,不设置  .enableHiveSupport() ,则不会使用hive支持,运行的仅为sparkSQL;
+   *
+   *  2. sparkSQL创建SparkSession对象时,设置了 enableHiveSupport() 配置就可以获取hive支持,可以同时操作HQL,sparkSQL;
+   *
+   *  3. sparkSQL 使用hive支持时, 即可以使用本地默认的hive,又可以使用外置hive,不管使用哪种hive,都需要将存储表数据的目录
+   *     spark.sql.warehouse.dir(库根路径) 指定到第三方公共存储空间,否则,否则创建hive表,加载数据时,默认存储在master本地 metastore_db
+   *     此目录在位于worker节点同步情况下,无法正常使用,而指定到第三方时,创建表时,就在元数据层面,将数据绑定到第三方存储空间,
+   *     加载数据时,就直接存储在此第三方公共空间,就不会出现数据共享问题
+   *
+   *
+   *  4. sparkSQL 使用内置hive之前需要删除根路径下的 metastore_db 和 spark-warehouse ,然后启动 hive
+   *    1).首次启动需要使用--conf spark.sql.warehouse.dir=hdfs://linux211:9000/spark-warehouse 将表的数据存储根路径指定在第三方存储空间
+   *       spark-shell --master spark://linux211:7077 --conf spark.sql.warehouse.dir=hdfs://linux211:9000/spark-warehouse
+   *    2).首次启动成功, spark.sql.warehouse.dir 就被记录在了master节点本地 metadata_db 元数据文件中,以后使用的spark-shell(sparkContext),
+   *       spark-sql 默认会使用此内置的hive,而不是原生的sparkSQL,想要摆脱hive,删除metadata_db即可
+   *    3).首次启动成功后,以后使用 saprk-shell(spark) , spark-sql 无需指定 --conf spark.sql.warehouse.dir=hdfs://linux211:9000/spark-warehouse
+   *       即可享有hive支持
+   *
+   *  5. sparkSQL 使用外置hive前,同理需要删除根路径下的 metastore_db 和 spark-warehouse ,然后将外部hive的 hive-site.xml 和 mysql 驱动jar手动拷贝到
+   *    spark 的conf 和 jars 目录,或通过软链接,链接到指定目录(只需在master节点操作即可),启动hive,即可获取外部hive支持,首次启动
+   *    ln -s $HIVE_HOME/conf/hive-site.xml
+   *    -------------------------------------------------
+   *     <!-- 表数据默认存储路径 -->
+         <property>
+            <name>hive.metastore.warehouse.dir</name>
+            <value>/user/hive/warehouse</value>
+         </property>
+
+         <!-- 显示表头-->
+         <property>
+                 <name>hive.cli.print.header</name>
+                 <value>true</value>
+         </property>
+
+         <!-- 显示库名 -->
+         <property>
+                 <name>hive.cli.print.current.db</name>
+                 <value>true</value>
+         </property>
+   *    -------------------------------------------------
+   *    注: 1).同上.首次启动需要删除 metastore_db 和 spark-warehouse
+   *        2). sbin/spark-start-all.sh 启动时,默认会读取conf目录下的hive-site.xml ,进而关联到hive,在本地重新生成 metastore_db
+   *        3). spark-shell [--master spark://linux211:7077] 连接到集群或本地模式,自动连接到hive
+   *
+   *  即启动spark-shell时需要指定  默认在本地metadata_db数据库
+
+   * 6.同样的业务,使用MySQl 处理,需要对 tbstock 中的 ordernumber, tbdate 中的 dateid 创建索引,否则执行会非常慢,同时需要创建视图 orderAnalysis ,itemAnalysis
+   *   "create temporarry table "临时表,在sql语句中只能被调用一次,不能进行复用,因此选择"create view "代替
+   *
+   */
+
+13.hive 动态分区
+    // 插入数据之前 表不存在
+      private def insertHive(spark:SparkSession,table:String,data:DataFrame): Unit ={
+        spark.sql("drop table if exists "+ table)
+        data.write.saveAsTable(table)
+      }
+
+      private def insertMySQL(table:String,data:DataFrame): Unit ={
+        data.write
+          .format("jdbc")
+          .option("url", "jdbc:mysql://localhost:3306/test")
+          .option("dbtable", table)
+          .option("user", "root")
+          .option("password", "root")
+          .save()
+      }
+
+      def main(args: Array[String]): Unit = {
+
+        val spark = SparkSession.builder()
+          .master("yarn-cluster")
+          .appName(this.getClass.getSimpleName)
+          .enableHiveSupport()
+          .config("hive.exec.dynamic.partition", true) // 支持 Hive 动态分区
+          .config("hive.exec.dynamic.partition.mode", "nonstrict") // 非严格模式
+          .getOrCreate()
+
+        import spark.implicits._
+
+        import spark.sql
+
+        try{
+          // sql("drop table if exists watch_tmp2")
+          // 动态分区
+          sql("insert into datareport.vid_uid_tmp_test partition(dt) select * from datareport.t_vid_uid where dt in ('20180511','20180512')")
+
+          val df = sql("select * from datareport.vid_uid_tmp_test where dt in ('20180511','20180512')").toDF("vid","uid","gold","dollar","diamond","day","country","dt")
+          df.show(5)
+
+        }finally {
+          spark.stop()
+        }
+
+
+
+
+
+
+
+

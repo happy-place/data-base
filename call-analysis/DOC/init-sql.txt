@@ -1,0 +1,36 @@
+use db_telecom;
+create table if not exists tb_dimension_contacts(
+id int(11) not null AUTO_INCREMENT,
+telephone varchar(255) not null ,
+name VARCHAR(255) not null,
+primary key (id)
+);
+
+create table if not exists tb_call(
+id_date_contact VARCHAR(255) not null,
+id_date_dimension int(11) not null ,
+id_contact_dimension int(11) not null,
+call_sum int(11) not null DEFAULT 0,
+call_duration_sum int(11) not null DEFAULT 0
+);
+
+create table if not exists tb_dimension_date(
+id int(11) not null AUTO_INCREMENT,
+`year` int(11) not null ,
+`month` int(11) not null,
+`day` int(11) not null,
+primary key (id)
+);
+
+create table if not exists tb_intimacy(
+id int(11) not null AUTO_INCREMENT,
+intimacy_rank int(11) not null ,
+id_contact1 int(11) not null,
+id_contact2 int(11) not null,
+call_count int(11) not null DEFAULT 0,
+call_duration_count int(11) not null DEFAULT 0,
+primary key (id)
+);
+
+
+

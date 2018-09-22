@@ -1,0 +1,176 @@
+查询每个部门的最高薪资：
+SELECT
+deptno, MAX(sal)
+FROM
+emp
+GROUP BY
+deptno;
+
+查询显示员工姓名，员工编号，部门名称
+SELECT
+e.ename,
+e.empno,
+d.dname
+FROM
+emp e JOIN dept d ON e.deptno = d.deptno
+
+按照部门进行薪资的排位
+SELECT
+empno,
+ename,
+sal,
+deptno,
+ROW_NUMBER() OVER(PARTITION BY deptno ORDER BY sal DESC) rank
+FROM
+emp;
+
+按照部门进行薪资排位，只显示前两名
+SELECT
+	temp.empno,
+	temp.ename,
+	temp.sal,
+	temp.deptno
+FROM(
+	SELECT
+		empno,
+		ename,
+		sal,
+		deptno,
+		ROW_NUMBER() OVER(PARTITION BY deptno ORDER BY sal DESC) rank
+	FROM
+			emp) temp
+WHERE
+temp.rank <= 2
+
+统计某个网站某天的所有PV数据
+格式：
+
+2015-08-28	35000
+
+SELECT
+	temp.date,
+	COUNT(temp.url) pv
+FROM(
+	SELECT
+	SUBSTRING(trackTime, 0, 10) date,
+	url
+	FROM
+	db_web_data.track_log
+WHERE
+	LENGTH(url) > 0) temp
+GROUP BY
+	temp.date;
+
+统计某个网站某天的所有UV数据
+格式：
+2015-08-28	35000  12000
+SELECT
+	temp.date,
+	COUNT(temp.url) pv,
+	COUNT(DISTINCT temp.guid) uv
+	FROM(
+	SELECT
+		SUBSTRING(trackTime, 0, 10) date,
+		url,
+		guid
+	FROM
+		db_web_data.track_log
+	WHERE
+	length(url) > 0) temp
+GROUP BY
+temp.date;
+
+
+CASE案例
+将总收入显示出来：
+select ename, case when comm is null then 0 + sal else comm + sal end from emp;
+显示收入评级：
+select ename, case when sal < 1000 then "lower" when sal >= 1000 and sal <= 2000 then "mid" else "high" end from db_hive_demo.emp;
+
+select ename, case when sal < 1000 then deptno when sal >= 1000 and sal <= 2000 then comm else "UNKNOWN" end from db_hive_demo.emp;
+
+
+load data local inpath "${hiveconf:LOADFILE_NEW}"
+into table db_web_log.track_log
+partition(date='${hiveconf:DATE_NEW}', hour='${hiveconf:HOUR_NEW}');
+
+create table if not exists db_web_log.track_log(
+id              string,
+
+url            string,
+
+referer        string,
+
+keyword        string,
+
+type            string,
+
+guid            string,
+
+pageId          string,
+
+moduleId        string,
+
+linkId          string,
+
+attachedInfo    string,
+
+sessionId      string,
+
+trackerU        string,
+
+trackerType    string,
+
+ip              string,
+
+trackerSrc      string,
+
+cookie          string,
+
+orderCode      string,
+
+trackTime      string,
+
+endUserId      string,
+
+firstLink      string,
+
+sessionViewNo  string,
+
+productId      string,
+
+curMerchantId  string,
+
+provinceId      string,
+
+cityId          string,
+
+fee            string,
+
+edmActivity    string,
+
+edmEmail        string,
+
+edmJobId        string,
+
+ieVersion      string,
+
+platform        string,
+
+internalKeyword string,
+
+resultSum      string,
+
+currentPage    string,
+
+linkPosition    string,
+
+buttonPosition  string
+
+)
+partitioned by (date string,hour string)
+row format delimited fields terminated by '\t';
+
+insert overwrite local directory "/home/admin/result/order" row format delimited fields terminated by "\t" select * from emp order by empno;
+
+insert overwrite local directory "/home/admin/result/sort" row format delimited fields terminated by "\t" select * from emp distribute by deptno sort by empno;

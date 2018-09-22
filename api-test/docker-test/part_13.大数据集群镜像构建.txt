@@ -1,0 +1,807 @@
+1.网络规划
+    docker network create --subnet=172.18.0.0/16 mynetwork
+
+    master          slave1          slave2
+    nn/sn/rm          dn               dn
+
+    # 宿主机上配置
+    vim /etc/profile
+    ---------------------------------------------------------------------------
+    net_on="docker network create --subnet=172.18.0.0/16 mynetwork"
+    net_off="docker network rm mynetwork"
+    ---------------------------------------------------------------------------
+
+    主机规划
+    "172.18.0.30 master"
+    "172.18.0.31 slave1"
+    "172.18.0.32 slave2"
+
+    安装包准备 (注：yum 安装的所有资源，在镜像层都不会保留，需要长期使用的应用，推荐使用下载安装包或源码编译方式安装)
+    wget http://archive.apache.org/dist/hadoop/common/hadoop-2.7.4/hadoop-2.7.4.tar.gz
+    wget http://archive.apache.org/dist/hive/hive-2.1.1/apache-hive-2.1.1-bin.tar.gz
+    wget http://archive.apache.org/dist/hbase/1.4.0/hbase-1.4.0-bin.tar.gz
+    wget  http://archive.apache.org/dist/spark/spark-2.2.0/spark-2.2.0-bin-hadoop2.7.tgz
+    wget http://downloads.lightbend.com/scala/2.12.1/scala-2.12.1.tgz
+    wget http://downloads.lightbend.com/scala/2.10.5/scala-2.10.5.tgz
+    wget http://mirrors.hust.edu.cn/apache/kylin/apache-kylin-2.3.2/apache-kylin-2.3.2-bin-hbase1x.tar.gz
+    wget http://download.redis.io/releases/redis-4.0.11.tar.gz
+    wget http://download.oracle.com/otn-pub/java/jdk/8u181-b13/96a7b8442fe848ef90c96a2fad6ed6d1/jdk-8u181-linux-x64.tar.gz?AuthParam=1537281869_73a18574ea7d4a8c53da2cfd9f5c994f
+    wget https://cdn.mysql.com//Downloads/MySQL-5.7/mysql-5.7.23-linux-glibc2.12-x86_64.tar.gz
+    mysql-connector-java-5.1.44-bin.jar
+    zookeeper-3.4.5-cdh5.7.0.tar.gz
+    flume-1.8.0.tar.gz
+    kafka_2.11-1.1.0.tar.gz
+
+2.基础镜像
+    docker pull centos:latest
+    # --privileged  使用全root 权限,/usr/sbin/init 初始化运行dbus-daemon，如此才能使用 systemctl 和 service (初始启动会耗费时间)
+    # --v 挂载数据卷目录
+    # /Users/huhao/software 挂载了上述下载资源
+    docker run --privileged -itd -v /Users/huhao/software/packages:/opt/packages --name c1 centos /usr/sbin/init
+    docker attach c1
+    [ ***  ] A start job is running for dev-ttyS0.device (13s / 1min 30s) <<< 等待1.5min 初始化 /usr
+    <<< 阻塞后直接 关闭shell 退出
+    docker exec -it c1 /bin/bash 重新登入
+
+    docker run --privileged -itd -v /Users/huhao/software/packages:/opt/packages --name c1 centos /usr/sbin/init
+
+    docker run --privileged -it --name master -h master --net mynetwork --ip 172.18.0.30 kylin_installed:v2  /bin/bash
+    docker run --privileged -it --name slave1 -h slave1 --net mynetwork --ip 172.18.0.31 kylin_installed:v2  /bin/bash
+    docker run --privileged -it --name slave2 -h slave2 --net mynetwork --ip 172.18.0.32 kylin_installed:v2  /bin/bash
+
+3.环境初始化
+    # net-tools(ifconfig,ping...) ,mlocate (locate), initscripts(service)
+    yum install net-tools,vim,wget,make,gcc,gcc-c++
+
+    # locate 命令
+    yum install mlocate
+    updatedb
+
+    # service -> systemctl
+    yum install initscripts
+
+    # ssh
+    yum install openssh-server openssh-clients
+    chkconfig sshd on
+    systemctl list-unit-files|grep enabled | grep sshd  # 相当于chkconfig sshd --list
+
+    service sshd start
+
+    yum install yum install mariadb-server -y
+    # 启动 mysql 服务
+    systemctl start mariadb.service
+    systemctl enable mariadb.service
+    ps -ef | grep mysql
+
+    # 初始化密码
+    mysqladmin -uroot password root
+    mysql -uroot -proot
+    grant all privileges on *.* to tom@'localhost' identified by 'cat' with grant option;
+
+    vim /etc/profile
+    JAVA_HOME=/opt/softwares/jdk1.8.0_181
+    export $JAVA_HOME
+    source /etc/profile
+
+    vim /etc/hosts
+    -------------------------------
+    172.18.0.30 master
+    172.18.0.31 slave1
+    172.18.0.32 slave2
+    -------------------------------
+
+5.解压安装包配置环境
+    前提: -v /Users/huhao/software/packages:/opt/packages
+
+    mkdri /opt/softwares/
+    cd /opt/packages/
+
+    tar -zxvf hadoop-2.7.4.tar.gz -C /opt/softwares/
+    tar -zxvf apache-hive-2.1.1-bin.tar.gz -C /opt/softwares/
+    tar -zxvf apache-kylin-2.3.2-bin-hbase1x.tar.gz -C /opt/softwares/
+    tar -zxvf hadoop-2.7.4.tar.gz -C /opt/softwares/
+    tar -zxvf hbase-1.4.0-bin.tar.gz -C /opt/softwares/
+    tar -zxvf scala-2.10.5.tgz -C /opt/softwares/
+    tar -zxvf spark-2.2.0-bin-hadoop2.7.tgz -C /opt/softwares/
+    tar -zxvf zookeeper-3.4.5-cdh5.7.0.tar.gz -C /opt/softwares/
+    tar -zxvf apache-kylin-2.3.2-bin-hbase1x.tar.gz -C /opt/softwares/
+    tar -zxvf flume-1.8.0.tar.gz.tar.gz -C /opt/softwares/
+    tar -zxvf kafka_2.11-1.1.0.tar.gz -C /opt/softwares/
+    tar -zxvf redis-4.0.11 -C /opt/softwares/
+    tar -zxvf mysql-5.7.23-linux-glibc2.12-x86_64.tar.gz
+
+    cp mysql-connector-java-5.1.44-bin.jar /opt/softwares/apache-hive-2.1.1-bin/lib
+    cp mysql-connector-java-5.1.44-bin.jar /opt/softwares/hbase-1.4.0-bin/lib
+
+    vim /etc/profile
+    ---------------------------------------------------------------------------
+
+    export BASE_DIR=/opt/softwares
+
+    export JAVA_HOME=/opt/softwares/jdk1.8.0_181
+
+    export HADOOP_HOME=$BASE_DIR/hadoop-2.7.4
+    export HADOOP_COMMON_HOME=$HADOOP_HOME
+    export HADOOP_HDFS_HOME=$HADOOP_HOME
+    export HADOOP_MAPRED_HOME=$HADOOP_HOME
+    export HADOOP_YARN_HOME=$HADOOP_HOME
+    export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+    export YARN_CONF_DIR=$HADOOP_HOME/etc/hadoop
+    export CLASSPATH=.:$HADOOP_HOME/lib:$CLASSPATH
+    export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
+    export LD_LIBRARY_PATH=$HADOOP_HOME/lib/native
+    export HADOOP_OPTS="-Djave.library.path=$HADOOP_HOME/lib"
+    export PATH=$PATH:$JAVA_HOME/bin:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
+
+    export FLUME_HOME=$BASE_DIR/flume-1.8.0
+    export PATH=$PATH:$FLUME_HOME/bin
+
+    export KAFKA_HOME=$BASE_DIR/kafka_2.11-1.1.0
+    export PATH=$PATH:$KAFKA_HOME/bin
+
+    export SCALA_HOME=$BASE_DIR/scala-2.10.5
+    export PATH=${SCALA_HOME}/bin:$PATH
+
+    export SPARK_HOME=$BASE_DIR/spark-2.2.0-bin-hadoop2.7
+    export PATH="$SPARK_HOME/bin:$PATH"
+
+    export HIVE_HOME=$BASE_DIR/apache-hive-2.1.1-bin
+    export HIVE_CONF_HOME=$HIVE_HOME/conf
+    export HCAT_HOME=$HIVE_HOME/hcatalog
+    export PATH=:$PATH:$HIVE_HOME/bin:$HCAT_HOME/bin
+
+    export ZOOKEEPER_HOME=$BASE_DIR/zookeeper-3.4.5-cdh5.7.0
+    export PATH=$PATH:$ZOOKEEPER_HOME/bin
+
+    export HBASE_HOME=$BASE_DIR/hbase-1.4.0-bin
+    export PATH=$PATH:$HBASE_HOME/bin
+
+    export KYLIN_HOME=$BASE_DIR/apache-kylin-2.3.2-bin
+    export KYLIN_CONF_HOME=$KYLIN_HOME/conf
+    export PATH=:$PATH:$KYLIN_HOME/bin:$CATALINE_HOME/bin
+    export tomcat_root=$KYLIN_HOME/tomcat
+    export hive_dependency=$HIVE_HOME/conf:$HIVE_HOME/lib/*:$HCAT_HOME/share/hcatalog/hive-hcatalog-core-2.1.1.jar
+
+    alias redis_on="/usr/local/bin/redis-server /etc/redis/redis.conf"
+    alias redis_cli="/usr/local/bin/redis-cli"
+    alias redis_off="/usr/local/bin/redis-cli shutdown"
+
+    ---------------------------------------------------------------------------
+
+5.配置
+    MYSQL
+        # 编译环境
+        cd /opt/packages/mysql-5.6.22
+
+        # 查找已经安装过的 mysql,并卸载
+        rpm -qa | grep -i mysql
+        rpm -e --nodeps 安装包名称(不带.rpm)
+
+        # 按顺序安装
+        rpm -ivh mysql-community-common-5.7.5-0.6.m15.el6.x86_64.rpm
+        rpm -ivh mysql-community-libs-5.7.5-0.6.m15.el6.x86_64.rpm
+        rpm -ivh mysql-community-client-5.7.5-0.6.m15.el6.x86_64.rpm
+        rpm -ivh mysql-community-server-5.7.5-0.6.m15.el6.x86_64.rpm
+
+        # 首次启动 (显示异常信息，不能以root身份启动mysql,如果正常启动默认会在 /var/log/mysqld.log 生成临时密钥 cat /var/log/mysqld.log | grep 'password' )
+        service mysql start
+
+        # 强制以 root 身份启动，且关闭网络访问，可登录授信这几步
+        mysqld --skip-grant-tables  --skip-networking --user=root  &
+        > use mysql;
+        > update mysql set password=password('root') where user='root';
+        > flush privileges;
+        >
+
+        # 关闭mysql 进程
+        ps -ef | grep mysqld
+        kill PID
+
+        # 重新登录
+        mysqld --user=root &
+        mysql -uroot -proot
+
+        # 查看当前默认密钥长度约束
+        mysql> select @@validate_password_length;
+        +----------------------------+
+        | @@validate_password_length |
+        +----------------------------+
+        |                          8 |
+        +----------------------------+
+
+        # 尝试修改为1，但发现小长度为4，且 root 必须 >8
+        set global validate_password_length=1;
+        select @@validate_password_length;
+        +----------------------------+
+        | @@validate_password_length |
+        +----------------------------+
+        |                          4 |
+        +----------------------------+
+
+        # 继续授权
+        grant all privileges on *.* to tom@'localhost' identified by 'kitty';
+        grant all privileges on *.* to tom@'%' identified by 'kitty';
+
+        # 修改配置文件，尝试配置默认使用 mysql用户身份启动服务
+        vim /etc/my.cnf
+        -----------------------------------
+        [mysqld]
+        user=mysql
+        .....
+        -----------------------------------
+
+        # 添加 mysql 用户 -s 不可登录，-M 不创建家目录， mysql 用户 mysql 组
+        useradd –s /sbin/nologin -M –g mysql:mysql
+
+        # 保险起见，需要将以安装 mysql 相关服务，全部设置属主为 mysql:mysql
+        updatedb
+        locate mysql*
+        chown mysql:mysql .....
+
+        # 重新启动mysql
+        systemctl restart mysql
+
+    REDIS
+        cd /opt/softwares/redis-4.0.11
+
+        make && make install
+
+        mkdir backup
+
+        vim redis.conf
+        ------------------------------------------------------------
+        bind 0.0.0.0
+        daemonize yes
+        dbfilename dump.rdb
+        dir /opt/softwares/redis-4.0.11/backup/
+        ------------------------------------------------------------
+
+        mkdir /etc/redis
+        cp /opt/softwares/redis-4.0.11/redis.conf /etc/redis/redis.conf
+
+
+    HADOOP
+        cd cd /opt/softwares/hadoop-2.7.4/
+
+        mkdir data tmp name
+
+        cd etc/hadoop
+
+        vim core-site.xml
+        ------------------------------------------------------------
+         <property>
+            <name>fs.defaultFS</name>
+            <value>hdfs://master:9000</value>
+          </property>
+          <property>
+            <name>hadoop.tmp.dir</name>
+            <value>file:/opt/softwares/hadoop-2.7.4/tmp</value>
+          </property>
+        ------------------------------------------------------------
+
+        vim hdfs-site.xml
+        ------------------------------------------------------------
+        <property>
+            <name>dfs.replication</name>
+            <value>1</value>
+        </property>
+        <property>
+            <name>dfs.datanode.data.dir</name>
+            <value>file:/opt/softwares/hadoop-2.7.4/data</value>
+        </property>
+        <property>
+            <name>dfs.namenode.name.dir</name>
+            <value>file:/opt/softwares/hadoop-2.7.4/name</value>
+        </property>
+        <property>
+            <name>dfs.namenode.secondary.http-address</name>
+            <value>master:9001</value>
+        </property>
+        ------------------------------------------------------------
+
+        vim yarn-site.xml
+        ------------------------------------------------------------
+        <property>
+            <name>yarn.nodemanager.aux-services</name>
+            <value>mapreduce_shuffle</value>
+        </property>
+        <property>
+            <name>yarn.nodemanager.auxservices.mapreduce.shuffle.class</name>
+            <value>org.apache.hadoop.mapred.ShuffleHandler</value>
+        </property>
+        <property>
+            <name>yarn.resourcemanager.address</name>
+            <value>master:8032</value>
+        </property>
+        <property>
+            <name>yarn.resourcemanager.scheduler.address</name>
+            <value>master:8030</value>
+        </property>
+        <property>
+            <name>yarn.resourcemanager.resource-tracker.address</name>
+            <value>master:8031</value>
+        </property>
+        <property>
+            <name>yarn.resourcemanager.admin.address</name>
+            <value>master:8033</value>
+        </property>
+        <property>
+            <name>yarn.resourcemanager.webapp.address</name>
+            <value>master:8088</value>
+        </property>
+        <!-- 经测试一下是 pi 计算能正常运行的最小内存 cpu 分配-->
+        <property>
+            <name>yarn.nodemanager.resource.memory-mb</name>
+            <value>2048</value>
+        </property>
+        <property>
+            <name>yarn.nodemanager.resource.cpu-vcores</name>
+            <value>1</value>
+        </property>
+
+        ------------------------------------------------------------
+
+        vim mapred-site.xml
+        ------------------------------------------------------------
+        <property>
+            <name>mapreduce.framework.name</name>
+            <value>yarn</value>
+        </property>
+        ------------------------------------------------------------
+
+        vim slaves
+        ------------------------------------------------------------
+        slave1
+        slave2
+        ------------------------------------------------------------
+
+        vim hadoop-env.sh
+        ------------------------------------------------------------
+        export JAVA_HOME=/opt/softwares/jdk1.8.0_181
+        ------------------------------------------------------------
+
+
+    FLUME
+        cd /opt/softwares/flume-1.8.0
+
+        mv  conf/flume-env.sh.template conf/flume-env.sh
+        vim conf/flume-env.sh
+        ------------------------------------------------------------
+        export JAVA_HOME=/opt/softwares/jdk1.8.0_181
+        ------------------------------------------------------------
+
+
+    KAFKA
+        cd /opt/softwares/kafka_2.11-1.1.0
+
+        mv conf/zoo_template.cfg conf/zoo.cfg
+        vim conf/zoo.cfg
+        ------------------------------------------------------------
+        log.dirs=/opt/softwares/kafka_2.11-1.1.0/logs/
+        zookeeper.connect=master:2181,slave1:2181,slave2:2181
+        ------------------------------------------------------------
+
+
+    ZOOKEEPER
+        cd /opt/softwares/zookeeper-3.4.5-cdh5.7.0
+
+        mkdir data
+
+        cd conf
+        mv zoo_sample.cfg zoo.cfg
+
+        vim zoo.cfg
+        ------------------------------------------------------------
+        dataDir=/opt/softwares/zookeeper-3.4.5-cdh5.7.0/data
+
+        server.1=master:2888:3888
+        server.2=slave1:2888:3888
+        server.3=slave2:2888:3888
+        maxClientCnxns=60
+        ------------------------------------------------------------
+
+        vim data/myid (1~3)
+        ------------------------------------------------------------
+        1
+        ------------------------------------------------------------
+
+
+    HBASE
+        vim hbase-env.sh
+        ------------------------------------------------------------
+        export JAVA_HOME=/opt/softwares/jdk1.8.0_181
+        ------------------------------------------------------------
+
+        vim hbase-site.xml
+        ------------------------------------------------------------
+        <property>
+            <name>hbase.rootdir</name>
+            <value>hdfs://master:9000/hbase_db</value>
+        </property>
+
+        <property>
+            <name>hbase.cluster.distributed</name>
+            <value>true</value>
+        </property>
+
+        <property>
+            <name>hbase.zookeeper.quorum</name>
+            <value>master,slave1,slave2</value>
+        </property>
+
+        <property>
+            <name>hbase.zookeeper.property.dataDir</name>
+            <!-- 需要与zk保持一致-->
+            <value>/opt/softwares/zookeeper-3.4.5-cdh5.7.0/data/</value>
+        </property>
+        ------------------------------------------------------------
+
+        vim regionservers
+        ------------------------------------------------------------
+        slave1
+        slave2
+        ------------------------------------------------------------
+
+
+    SPARK
+        cd /opt/softwares/spark-2.2.0-bin-hadoop2.7/conf
+
+        vim spark-env.sh
+        ------------------------------------------------------------
+        export BASE_DIR=/opt/softwares
+        export HADOOP_HOME=$BASE_DIR/hadoop-2.7.4
+        export SCALA_HOME=$BASE_DIR/scala-2.10.5
+        export JAVA_HOME=/opt/softwares/jdk1.8.0_181
+        export SPARK_MASTER_IP=master
+        export SPARK_WORKER_MEMORY=1g
+        export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+        ------------------------------------------------------------
+
+        mv slaves.template  slaves
+
+        vim slaves
+        ------------------------------------------------------------
+        slave1
+        slave2
+        ------------------------------------------------------------
+
+
+    HIVE
+        cd /opt/softwares/apache-hive-2.1.1-bin/
+        mkdir mkdir log warehouse tmp
+
+        mv hive-env.sh.template hive-env.sh
+        vim hive-env.sh
+        ------------------------------------------------------------
+        export BASE_DIR=/opt/softwares
+        export JAVA_HOME=/opt/softwares/jdk1.8.0_181
+        export HADOOP_HOME=$BASE_DIR/hadoop-2.7.4
+        export HIVE_HOME=$BASE_DIR/apache-hive-2.1.1-bin
+        export HIVE_CONF_DIR=$HIVE_HOME/conf
+        ------------------------------------------------------------
+
+        mv hive-default.xml.template hive-site.xml (建议直接 vim hive-site.xml )
+        vim hive-site.xml
+        ------------------------------------------------------------
+        <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+        <?xml-stylesheet type="text/xsl" href="configuration.xsl"?><!--
+           Licensed to the Apache Software Foundation (ASF) under one or more
+           contributor license agreements.  See the NOTICE file distributed with
+           this work for additional information regarding copyright ownership.
+           The ASF licenses this file to You under the Apache License, Version 2.0
+           (the "License"); you may not use this file except in compliance with
+           the License.  You may obtain a copy of the License at
+
+
+               http://www.apache.org/licenses/LICENSE-2.0
+
+
+           Unless required by applicable law or agreed to in writing, software
+           distributed under the License is distributed on an "AS IS" BASIS,
+           WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+           See the License for the specific language governing permissions and
+           limitations under the License.
+        -->
+
+        <configuration>
+
+          <property>
+            <name>hive.exec.scratchdir</name>
+            <value>/opt/softwares/apache-hive-2.1.1-bin/tmp</value>
+          </property>
+
+          <property>
+              <name>hive.metastore.warehouse.dir</name>
+              <value>/opt/softwares/apache-hive-2.1.1-bin/warehouse</value>
+          </property>
+
+          <property>
+              <name>hive.querylog.location</name>
+              <value>/opt/softwares/apache-hive-2.1.1-bin/log</value>
+          </property>
+
+          <property>
+              <name>javax.jdo.option.ConnectionURL</name>
+              <value>jdbc:mysql://localhost:3306/hive?createDatabaseIfNotExist=true&amp;characterEncoding=UTF-8&amp;useSSL=false</value>
+          </property>
+          <property>
+              <name>javax.jdo.option.ConnectionDriverName</name>
+              <value>com.mysql.jdbc.Driver</value>
+          </property>
+          <property>
+              <name>javax.jdo.option.ConnectionUserName</name>
+              <value>root</value>
+          </property>
+          <property>
+              <name>javax.jdo.option.ConnectionPassword</name>
+              <value>root</value>
+          </property>
+
+      <property>
+          <name>hive.cli.print.header</name>
+          <value>true</value>
+      </property>
+       
+      <property>
+          <name>hive.cli.print.current.db</name>
+          <value>true</value>
+      </property>
+
+
+        </configuration>
+        ------------------------------------------------------------
+
+    KYLIN
+        cd /opt/softwares/apache-kylin-2.3.2-bin/
+
+        # 第一个问题是kylinweb界面load hive表会失败，第二个问题是cube build的第二步会报org/apache/Hadoop/hive/conf/hiveConf的错误。
+        vim bin/kylin.sh
+        ------------------------------------------------------------
+        export HBASE_CLASSPATH_PREFIX=${tomcat_root}/bin/bootstrap.jar:${tomcat_root}/bin/tomcat-juli.jar:${tomcat_root}/lib/*:$hive_dependency:$HBASE_CLASSPATH_PREFIX
+        ------------------------------------------------------------
+
+        # hadoop 未经编译过，不支持 snappy 压缩
+        vim conf/kylin_job_conf.xml
+        ------------------------------------------------------------
+        mapreduce.map.output.compress设置为false
+        mapreduce.output.fileoutputformat.compress 设置为false
+        ------------------------------------------------------------
+
+        vim conf/kylin_hive_conf.xml
+        ------------------------------------------------------------
+        hive.exec.compress.output 设置为false
+        ------------------------------------------------------------
+
+        vim kylin.properties
+        ------------------------------------------------------------
+        kylin.env=DEV
+        kylin.server.mode=all      ###kylin主节点模式，从节点的模式为query，只有这一点不一样
+        kylin.server.cluster-servers=master:7070,slave1:7070,slave2:7070
+        kylin.source.hive.database-for-flat-table=kylin_flat_db
+        kylin.storage.hbase.compression-codec=none
+        ------------------------------------------------------------
+
+
+5.保存镜像
+    docker commit -m "kylin_installed" -a "whohow20094702@163.com" kylin_installed:v2
+
+    docker iamges
+    ------------------------------------------------------------------------------------------------------------------------
+    kylin_installed                   v2                  8c8d7a941e6e        19 minutes ago      2.35GB  <<< 解压并配置好了
+    mount_pk                          v1                  4d55816b1d44        6 hours ago         843MB   <<< 解压好了
+    install_env                       v0                  19589bcf0f7e        7 hours ago         577MB   <<< 完善及基础环境  /usr/sbin/init
+    centos                            latest              5182e96772bf        6 weeks ago         200MB   <<< 基础镜像
+    ------------------------------------------------------------------------------------------------------------------------
+
+
+6.打通集群
+    # 启动3个节点容器
+    (--privileged 完全root 权限且必须经执行了/usr/sbin/init,--name 容器名，-h master 主机名,--net mynetwork 网桥，--ip 172.18.0.30 网桥ip)
+
+        docker run --privileged -it --name master -h master --net mynetwork --ip 172.18.0.30 kylin_installed:v2 /usr/sbin/init
+        docker run --privileged -it --name slave1 -h slave1 --net mynetwork --ip 172.18.0.31 kylin_installed:v2 /usr/sbin/init
+        docker run --privileged -it --name slave2 -h slave2 --net mynetwork --ip 172.18.0.32 kylin_installed:v2 /usr/sbin/init
+
+        docker exec -it master /bin/bash
+        docker exec -it slave1 /bin/bash
+        docker exec -it slave2 /bin/bash
+
+    # 网络环境检测 (master,slave1,slave2)
+        yum install net-tools
+        ifconfig 或 hostname 检测ip
+
+    # root用户设置密码 (master,slave1,slave2)
+    passwd root
+
+    # ssh 互访 (master,slave1,slave2)
+    ssh-keygen -t rsa
+    ssh-copy-id root@master
+    ssh-copy-id root@slave1
+    ssh-copy-id root@slave2
+
+    # 配置辅助脚本
+
+    vim /usr/local/bin/xcall
+    ----------------------------------------------------------------
+    #!/bin/sh
+    # 群调脚本
+    # 无惨直接退出
+    if (($#==0));then
+     echo "no args ..."   
+     exit 0
+    fi
+
+    source /etc/profile
+
+    DIR=`cd -P $(dirname $1);pwd`
+    USER=`whoami`
+    HOST=`hostname`
+    hosts=('master' 'slave1' 'slave2')
+
+    for host in ${hosts[@]}
+    do
+      echo "--- --- --- ssh $USER@$host $@ --- --- ---"
+      ssh $USER@$host $@
+    done
+
+    exit 0
+    ----------------------------------------------------------------
+
+    vim /usr/local/bin/xsync
+    ----------------------------------------------------------------
+    #!/bin/bash
+    # 分发脚本
+
+    if (( $# == 0 ));then
+     echo "no args"       
+     exit 0
+    fi
+
+    USER=`whoami`
+    DIR=`cd -P $(dirname $1);pwd`
+    TARGET=`basename $1`
+    MYSELF=`hostname`
+    hosts=('master' 'slave1' 'slave2')
+
+    for host in ${hosts[@]}
+      do
+         if [[ "$MYSELF" != "$host" ]]; then
+             echo "--- --- --- scp $DIR/$TARGET $USER@$host:/$DIR --- --- ---"
+             scp $DIR/$TARGET $USER@$host:/$DIR
+         fi
+    done
+
+    exit 0
+    ----------------------------------------------------------------
+
+    # 授权
+    chmod 755 /usr/local/bin/xsync  /usr/local/bin/xcall
+
+    # 3节点同时配置bash ssh 访问环境变量 ~/.bashrc (~/.bash_profile 是脚本执行环境)
+    vim ~/.bashrc
+    -----------------------------------------------------------------------------------------
+    export BASE_DIR=/opt/softwares
+
+    export JAVA_HOME=$BASE_DIR/jdk1.8.0_181
+
+    export HADOOP_HOME=$BASE_DIR/hadoop-2.7.4
+    export HADOOP_COMMON_HOME=$HADOOP_HOME
+    export HADOOP_HDFS_HOME=$HADOOP_HOME
+    export HADOOP_MAPRED_HOME=$HADOOP_HOME
+    export HADOOP_YARN_HOME=$HADOOP_HOME
+    export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+    export YARN_CONF_DIR=$HADOOP_HOME/etc/hadoop
+    export CLASSPATH=.:$HADOOP_HOME/lib:$CLASSPATH
+    export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
+    export LD_LIBRARY_PATH=$HADOOP_HOME/lib/native
+    export HADOOP_OPTS="-Djave.library.path=$HADOOP_HOME/lib"
+    export PATH=$PATH:$JAVA_HOME/bin:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
+
+    export FLUME_HOME=$BASE_DIR/flume-1.8.0
+    export PATH=$PATH:$FLUME_HOME/bin
+
+    export KAFKA_HOME=$BASE_DIR/kafka_2.11-1.1.0
+    export PATH=$PATH:$KAFKA_HOME/bin
+
+    export SCALA_HOME=$BASE_DIR/scala-2.10.5
+    export PATH=${SCALA_HOME}/bin:$PATH
+
+    export SPARK_HOME=$BASE_DIR/spark-2.2.0-bin-hadoop2.7
+    export PATH="$SPARK_HOME/bin:$PATH"
+
+    export HIVE_HOME=$BASE_DIR/apache-hive-2.1.1-bin
+    export HIVE_CONF_HOME=$HIVE_HOME/conf
+    export HCAT_HOME=$HIVE_HOME/hcatalog
+    export PATH=:$PATH:$HIVE_HOME/bin:$HCAT_HOME/bin
+
+    export ZOOKEEPER_HOME=$BASE_DIR/zookeeper-3.4.5-cdh5.7.0
+    export PATH=$PATH:$ZOOKEEPER_HOME/bin
+
+    export HBASE_HOME=$BASE_DIR/hbase-1.4.0-bin
+    export PATH=$PATH:$HBASE_HOME/bin
+
+    export KYLIN_HOME=$BASE_DIR/apache-kylin-2.3.2-bin
+    export KYLIN_CONF_HOME=$KYLIN_HOME/conf
+    export PATH=:$PATH:$KYLIN_HOME/bin:$CATALINE_HOME/bin
+    export tomcat_root=$KYLIN_HOME/tomcat
+    export hive_dependency=$HIVE_HOME/conf:$HIVE_HOME/lib/*:$HCAT_HOME/share/hcatalog/hive-hcatalog-core-2.1.1.jar
+
+    alias redis_on="/usr/local/bin/redis-server /etc/redis/redis.conf"
+    alias redis_cli="/usr/local/bin/redis-cli"
+    alias redis_off="/usr/local/bin/redis-cli shutdown"
+    -----------------------------------------------------------------------------------------
+
+    # 测试 master 分发 -> slave1 slave2
+    [root@master opt]# xsync /usr/local/bin/xsync
+    --- --- --- scp /usr/local/bin/xsync root@slave1://usr/local/bin --- --- ---
+    xsync                                                                                                                                   100%  408   251.7KB/s   00:00
+    --- --- --- scp /usr/local/bin/xsync root@slave2://usr/local/bin --- --- ---
+    xsync
+
+    # 测试 master 调用 -> slave1 slave2
+    [root@master opt]# xcall ls -l
+    --- --- --- ssh root@master ls -l --- --- ---
+    total 4
+    -rw------- 1 root root 3415 Aug  4 22:05 anaconda-ks.cfg
+    --- --- --- ssh root@slave1 ls -l --- --- ---
+    total 4
+    -rw------- 1 root root 3415 Aug  4 22:05 anaconda-ks.cfg
+    --- --- --- ssh root@slave2 ls -l --- --- ---
+    total 4
+    -rw------- 1 root root 3415 Aug  4 22:05 anaconda-ks.cfg
+
+
+7.配置HADOOP
+    # 格式化 (master,slave1,slave2)
+    hadoop namenode -format
+
+    # 内存分配不足，导致 nodemanager 启动失败
+    docker commmit -m "change_jdk" -a "whohow20094702@163.com" kylin_installed:v2 change_jdk:v3
+
+    # -m 重新分配内存 -p10000 beeline
+    docker run --privileged -it --name master -m 2048m -h master --net mynetwork --ip 172.18.0.30 -p 50070:50070 -p 8088:8088 -p 6370:6379 -p 3306:3306 -p 2180:2181 -p 7070:7070 -p 9090:9092 -p10000:10000 change_jdk:v3 /usr/sbin/init
+    docker run --privileged -it --name slave1 -m 2048m -h slave1 --net mynetwork --ip 172.18.0.31 -p 6371:6379 -p 3307:3306 -p 2181:2181 -p 7071:7070 -p 9091:9092 change_jdk:v3 /usr/sbin/init
+    docker run --privileged -it --name slave2 -m 2048m -h slave2 --net mynetwork --ip 172.18.0.32 -p 6372:6379 -p 3308:3306 -p 2182:2181 -p 7072:7070 -p 9092:9092 change_jdk:v3 /usr/sbin/init
+
+    # 调整权限和属主
+    cd /opt/softwares
+    chmod 755 -R ./*
+    chown root:root -R ./*
+
+    # 启动集群
+    cd /opt/softwares/hadoop-2.7.4
+    start-all.sh
+
+    # pi 计算测试 http://localhost:8088/cluster
+    hadoop jar share/hadoop/mapreduce/hadoop-mapreduce-examples-2.7.4.jar pi 10 100
+
+    # 查看集群状态
+    [root@master opt]# xcall jps
+    --- --- --- ssh root@master jps --- --- ---
+    3601 Jps
+    1400 NameNode
+    1593 SecondaryNameNode
+    1755 ResourceManager
+    --- --- --- ssh root@slave1 jps --- --- ---
+    886 Jps
+    300 NodeManager
+    188 DataNode
+    --- --- --- ssh root@slave2 jps --- --- ---
+    178 DataNode
+    290 NodeManager
+    810 Jps
+
+
+8.配置HIVE
+    create external table dual(
+        id      int
+       ,name    string
+       ,hobby   array<string>
+       ,add     map<String,string>
+    )
+    row format delimited fields terminated by '\t'
+    collection items terminated by ','
+    map keys terminated by ':'
+    location '/dual';
+
+

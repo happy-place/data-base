@@ -1,0 +1,360 @@
+1.版本声明
+    apache-hive-2.3.3-bin.tar.gz
+    hadoop-2.6.0-cdh5.7.0.tar.gz
+    spark-1.6.0-cdh5.7.0.tar.gz
+    apache-kylin-2.4.0-bin-cdh57.tar.gz
+    hbase-1.2.0-cdh5.7.0.tar.gz
+    sqoop-1.4.6-cdh5.7.0.tar.gz
+    flume-ng-1.6.0-cdh5.7.0.tar.gz
+    oozie-4.1.0-cdh5.7.0.tar.gz
+    zookeeper-3.4.5-cdh5.7.0.tar.gz
+
+2.安装目录 /Users/huhao/software/cdh-5.7.0/
+    集中配置环境变量
+    vim ~/.bashrc
+    --------------------------------------------------------------
+    # hadoop
+    HADOOP_HOME=/Users/huhao/software/cdh-5.7.0/hadoop-2.6.0-cdh5.7.0/
+    PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
+    export HADOOP_HOME PATH
+
+    # hive
+    HIVE_HOME=/Users/huhao/software/cdh-5.7.0/apache-hive-2.3.3-bin
+    HIVE_CONF_DIR=$HIVE_HOME/conf
+    HIVE_AUX_JARS_PATH=$HIVE_HOME/extlib
+    PATH=$PATH:$HIVE_HOME/bin
+    export HIVE_HOME HIVE_CONF_DIR HIVE_AUX_JARS_PATH PATH
+    export hive_dependency=/Users/huhao/software/cdh-5.7.0/apache-hive-2.3.3-bin/conf:/Users/huhao/software/cdh-5.7.0/apache-hive-2.3.3-bin/lib/*:/Users/huhao/software/cdh-5.7.0/apache-hive-2.3.3-bin/hcatalog/share/hcatalog/hive-hcatalog-core-2.3.3.jar
+
+    # hcat
+    HCAT_HOME=$HIVE_HOME/hcatalog
+    PATH=$PATH:$HCAT_HOME/bin
+    export HCAT_HOME PATH
+
+    # zookeeper
+    ZOOKEEPER_HOME=/Users/huhao/software/zookeeper-3.4.5
+    PATH=$PATH:$ZOOKEEPER_HOME/bin
+    export ZOOKEEPER_HOME PATH
+
+    # hbase
+    HBASE_HOME=/Users/huhao/software/cdh-5.7.0/hbase-1.2.0-cdh5.7.0
+    PATH=$PATH:$HBASE_HOME/bin
+    export HBASE_HOME PATH
+
+    # kylin
+    KYLIN_HOME=/Users/huhao/software/cdh-5.7.0/apache-kylin-2.4.0-bin-cdh57
+    KYLIN_CONF=$KYLIN_HOME/conf
+    PATH=$PATH:$KYLIN_HOME/bin
+    export KYLIN_CONF KYLIN_HOME PATH
+    --------------------------------------------------------------
+
+    source ~/.bashrc
+
+3.安装 hadoop
+    tar -zxvf hadoop-2.6.0-cdh5.7.0.tar.gz -C ../
+    cd etc/hadoop
+    vim hdfs-site.xml
+    --------------------------------------------------------------
+    <configuration>
+      <property>
+        <name>dfs.name.dir</name>
+        <value>/Users/huhao/software/cdh-5.7.0/datalog</value>
+      </property>
+      <property>
+        <name>dfs.data.dir</name>
+        <value>/Users/huhao/software/cdh-5.7.0/data</value>
+      </property>
+      <property>
+        <name>dfs.replication</name>
+        <value>1</value>
+      </property>
+    </configuration>
+    --------------------------------------------------------------
+
+    vim mapred-site.xml
+    --------------------------------------------------------------
+    <configuration>
+      <property>
+        <name>mapred.job.tracker</name>
+        <value>localhost:9001</value>
+      </property>
+      <property>
+        <name>mapreduce.framework.name</name>
+        <value>yarn</value>
+      </property>
+    </configuration>
+    --------------------------------------------------------------
+
+    vim yarn-site.xml
+    --------------------------------------------------------------
+    <configuration>
+        <property>
+        　　<name>yarn.resourcemanager.address</name>
+        　　<value>localhost:8032</value>
+        </property>
+        <property>
+        　　<name>yarn.resourcemanager.scheduler.address</name>
+        　　<value>localhost:8030</value>
+        </property>
+        <property>
+        　　<name>yarn.resourcemanager.resource-tracker.address</name>
+        　　<value>localhost:8031</value>
+        </property>
+        <property>
+        　　<name>yarn.resourcemanager.admin.address</name>
+        　　<value>localhost:8033</value>
+        </property>
+        <property>
+        　　<name>yarn.resourcemanager.webapp.address</name>
+        　　<value>localhost:8088</value>
+        </property>
+        <property>
+        　　<name>yarn.nodemanager.address</name>
+        　　<value>localhost:8034</value>
+        </property>
+        <property>
+            <name>yarn.nodemanager.aux-services</name>
+            <value>mapreduce_shuffle</value>
+        </property>
+        <property>
+            <name>yarn.nodemanager.aux-services.mapreduce.shuffle.class</name>
+            <value>org.apache.hadoop.mapred.ShuffleHandler</value>
+        </property>
+    </configuration>
+    --------------------------------------------------------------
+
+    vim core-site.xml
+    --------------------------------------------------------------
+    <configuration>
+      <property>
+        <name>fs.default.name</name>
+        <value>hdfs://localhost:9000</value>
+      </property>
+    </configuration>
+    --------------------------------------------------------------
+
+    hdfs namenode -format 》》》Successfully formated! 格式
+    start-all.sh
+    stop-all.sh
+    sbin/mr-jobhistory-daemon.sh start historyserver
+
+    访问  HDFS: http://localhost:50070/dfshealth.html#tab-overview
+         YARN: http://localhost:8088/
+    MR_TEST: $HADOOP_HOME/bin/hadoop jar $HADOOP_HOMEshare/hadoop/mapreduce/hadoop-mapreduce-examples-2.6.0-cdh5.7.0.jar pi 3 1024
+
+4.hive安装
+    tar -zxvf apache-hive-2.3.3-bin.tar.gz -C ../
+    cd /Users/huhao/software/cdh-5.7.0/apache-hive-2.3.3-bin/conf
+    cp hive-default.xml.template hive-site.xml
+
+    vim hive-site.xml
+    --------------------------------------------------------------
+    <property>
+      <name>javax.jdo.option.ConnectionURL</name>
+      <value>jdbc:mysql://localhost:3306/hive?createDatabaseIfNotExist=true</value>
+      <description>JDBC connect string for a JDBC metastore</description>
+    </property>
+    <property>
+      <name>javax.jdo.option.ConnectionDriverName</name>
+      <value>com.mysql.jdbc.Driver</value>
+      <description>Driver class name for a JDBC metastore</description>
+    </property>
+    <property>
+      <name>javax.jdo.option.ConnectionUserName</name>
+      <value>hive</value>
+      <description>username to use against metastore database</description>
+    </property>
+    <property>
+      <name>javax.jdo.option.ConnectionPassword</name>
+      <value>hive</value>
+      <description>password to use against metastore database</description>
+    </property>
+    <!-- kylin 通过hcat 访问hive-->
+    <property>
+      <name>hive.metastore.uris</name>
+      <value>thrift://localhost:9083</value>
+      <description>Thrift URI for the remote metastore. Used by metastore client to connect to remote metastore.</description>
+    </property>
+    --------------------------------------------------------------
+
+    mysql -u root -p
+    CREATE DATABASE hive;
+    GRANT ALL PRIVILEGES ON hive.* TO 'hive'@'localhost' IDENTIFIED BY 'hive';
+    FLUSH PRIVILEGES;
+
+    cp mysql-connector-java-5.1.41-bin.jar /Users/huhao/software/cdh-5.7.0/apache-hive-2.3.3-bin/lib
+
+    bin/schematool -dbType mysql -initSchema 》》 初始化
+
+    hive本地登录测试
+
+    bin/hive --service metastore -p 9083 &  》》 开启 hive metastore，kylin访问必须
+    或
+    --------------------------------------------------------------
+    ---------- start hiveserver2 ----------
+    nohup hive --service metastore 2>&1 &
+    nohup hive --service hiveserver2 2>&1 &  》》 非 kylin 访问必须
+
+    ---------- stop hiveserver2 ------------
+    ps -ef  | grep hiveserver2 | grep -v 'grep' |awk -F' ' '{print $2}' | xargs kill
+    ps -ef  | grep metastore | grep -v 'grep' |awk -F' ' '{print $2}' | xargs kill
+
+    ----------- beeline --------------
+    beeline -u jdbc:hive2://localhost:10000 -n "huhao" -p "huhao"
+    --------------------------------------------------------------
+
+5.安装zookeeper
+
+    tar -zxvf zookeeper-3.4.5-cdh5.7.0.tar.gz -C ../
+    cd /Users/huhao/software/cdh-5.7.0/zookeeper-3.4.5-cdh5.7.0/conf
+    cp zoo_sample.cfg zoo.cfg
+
+    vim zoo.cfg
+    --------------------------------------------------------------
+    tickTime=2000
+    initLimit=10
+    syncLimit=5
+    dataDir=/Users/huhao/software/cdh-5.7.0/zookeeper-3.4.5-cdh5.7.0/data
+    clientPort=2181
+    server.1=localhost:2888:3888
+    --------------------------------------------------------------
+
+    mkdir /Users/huhao/software/cdh-5.7.0/zookeeper-3.4.5-cdh5.7.0/data
+    vim data/myid
+    --------------------------------------------------------------
+    1
+    --------------------------------------------------------------
+
+    bin/zkServer.sh start
+    bin/zkServer.sh status
+
+    zkCli.sh 本地登录测试
+
+6.hbase安装
+    tar hbase-1.2.0-cdh5.7.0.tar.gz -C ../
+    cd /Users/huhao/software/cdh-5.7.0/hbase-1.2.0-cdh5.7.0/conf
+
+    vim hbase-site.xml
+    --------------------------------------------------------------
+    <configuration>
+        <property>
+            <name>hbase.rootdir</name>
+            <value>hdfs://localhost:9000/hbase</value>
+        </property>
+        <property>
+            <name>hbase.master</name>
+            <value>hdfs://localhost:60000</value>
+        </property>
+        <property>
+            <name>hbase.cluster.distributed</name>
+            <value>true</value>
+        </property>
+        <property>
+            <name>hbase.zookeeper.property.clientPort</name>
+            <value>2181</value>
+        </property>
+        <property>
+            <name>hbase.zookeeper.quorum</name>
+            <value>localhost</value>
+        </property>
+        <property>
+            <name>hbase.zookeeper.property.dataDir</name>
+            <value>/Users/huhao/software/cdh-5.7.0/zookeeper-3.4.5-cdh5.7.0/data</value>
+        </property>
+        <property>
+            <name>hbase.client.scanner.caching</name>
+            <value>200</value>
+        </property>
+        <property>
+            <name>hbase.balancer.period</name>
+            <value>300000</value>
+        </property>
+        <property>
+            <name>hbase.client.write.buffer</name>
+            <value>10485760</value>
+        </property>
+        <property>
+            <name>hbase.hregion.majorcompaction</name>
+            <value>7200000</value>
+        </property>
+        <property>
+            <name>hbase.hregion.max.filesize</name>
+            <value>67108864</value>
+            <description></description>
+        </property>
+        <property>
+            <name>hbase.hregion.memstore.flush.size</name>
+            <value>1048576</value>
+        <description></description>
+        </property>
+        <property>
+            <name>hbase.server.thread.wakefrequency</name>
+            <value>30000</value>
+            <description></description>
+        </property>
+    </configuration>
+    --------------------------------------------------------------
+
+    vim hbase-env.sh  >> 使用外置zk
+    --------------------------------------------------------------
+    export HBASE_MANAGES_ZK=false
+    --------------------------------------------------------------
+
+    持有 hadoop
+    ln -s /Users/huhao/software/cdh-5.7.0/hadoop-2.6.0-cdh5.7.0/etc/hadoop/core-site.xml conf
+    ln -s /Users/huhao/software/cdh-5.7.0/hadoop-2.6.0-cdh5.7.0/etc/hadoop/hdfs-site.xml conf
+
+    start-hbase.sh
+
+    http://localhost:60010/master-status 登录测试
+
+7.kylin安装
+    tar -zxvf apache-kylin-2.4.0-bin-cdh57.tar.gz -C ../
+    cd /Users/huhao/software/cdh-5.7.0/apache-kylin-2.4.0-bin-cdh57/conf
+
+    bin/check-env.sh 执行依赖检查
+    坑1：'printf' 函数调用异常
+
+    MAC 需要另行安装 find，sed 组件 find -> gfind, sed -> gsed
+    brew install gnu-sed
+    brew install findutils
+
+    vim bin/find-hive-dependency.sh
+    --------------------------------------------------------------
+    154 # hive_lib=`find -L ${hive_lib_dir} -name '*.jar' ! -name '*calcite*' ! -name '*jackson-datatype-joda*' ! -name '*derby*' -printf '%p:' | sed 's/:$//'`
+    155 hive_lib=`gfind -L "$(dirname $hive_exec_path)" -name '*.jar' ! -name '*calcite*' -printf '%p:' | gsed 's/:$//'`
+    --------------------------------------------------------------
+
+    vim bin/find-spark-dependency.sh
+    --------------------------------------------------------------
+    38 # spark_dependency=`find -L $spark_home/jars -name '*.jar' ! -name '*doc*' ! -name '*test*' ! -name '*sources*' ''-printf '%p:' | sed 's/:$//'`
+    39 spark_dependency=`gfind -L $spark_home/jars -name '*.jar' ! -name '*doc*' ! -name '*test*' ! -name '*sources*' ''-printf '%p:' | gsed 's/:$//'`
+    --------------------------------------------------------------
+
+    vim find-kafka-dependency.sh
+    --------------------------------------------------------------
+    34 # kafka_dependency=`find -L $kafka_home -name 'kafka-clients-[a-z0-9A-Z\.-]*.jar' ! -name '*doc*' ! -name '*test*' ! -name '*sources*' ''-printf '%p:' | sed 's/:$//'`
+    35 kafka_dependency=`gfind -L $kafka_home -name 'kafka-clients-[a-z0-9A-Z\.-]*.jar' ! -name '*doc*' ! -name '*test*' ! -name '*sources*' ''-printf '%p:' | gsed 's/:$//'`
+    --------------------------------------------------------------
+
+    坑2：kylin.sh start 启动报错 spring-web 启动报错
+    tail -1000 log/kylin.log
+    --------------------------------------------------------------
+    org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter':
+    。。。。。。。。。。。。。。。。。。。。。。
+    Caused by: java.lang.NoSuchMethodError: org.joda.time.format.DateTimeFormatter.withZoneUTC()Lorg/joda/time/format/DateTimeFormatter;
+    at com.fasterxml.jackson.datatype.joda.ser.JodaDateSerializerBase.<clinit>(JodaDateSerializerBase.java:15)
+    --------------------------------------------------------------
+
+    下载：http://central.maven.org/maven2/com/fasterxml/jackson/datatype/jackson-datatype-joda/2.9.5/jackson-datatype-joda-2.9.5.jar
+    cp jackson-datatype-joda-2.9.5.jar /Users/huhao/software/cdh-5.7.0/apache-kylin-2.4.0-bin-cdh57/tomcat/webapps/kylin/WEB-INF/lib
+
+    kylin.sh stop
+
+    kylin.sh start 重启
+
+    http://localhost:7070/kylin  [ADMIN/KYLIN]
+
+8.http请求Baee64加密密钥
+    echo -n “kylin_id:password” | base64
+

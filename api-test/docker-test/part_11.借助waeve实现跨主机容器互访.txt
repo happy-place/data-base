@@ -1,0 +1,447 @@
+1.借助weave快速部署跨宿主机容器互访网络
+
+                                              GATEWAY 172.16.32.2
+                                              _↑               ↑_
+           172.16.32.100 ens33 HOST1                                      HOST2 ens33 172.16.32.101
+                                 ↑                                          ↑
+                              Docker1                                   Docker1
+             172.18.0.2 eth1      ↑   → weave = (161.100.0.0/16) = weave ←   ↑       eth1  172.18.0.2
+   161.100.1.100   ethwe0    Container_1                              Container_1     ethwe0 161.100.2.100
+
+   特点：启动weave服务，本质上创建了名为 weave的容器，该容器专门处理其他容器网络通信
+        docker 通过 --network 选项启动时，则选择使用 weave 网桥 通信。此时会在启动容器中创建 ethwe0 网卡，接入 weave 网桥容器，与外部宿主机容器实现互联
+
+2.环境
+    宿主机
+    HOST1 IP 172.16.32.100 GATEWAY 172.16.32.2
+    HOST2 IP 172.16.32.101 GATEWAY 172.16.32.2
+
+    weave 网桥容器 管理网段 ..."--ipalloc-range 161.100.0.0/16"
+
+    Docker容器自定义IP
+    HOST1 w1 IP ..."--network weave --ip 161.100.1.100"
+    HOST2 w2 IP ..."--network weave --ip 161.100.2.100"
+
+3.实战
+    HOST1
+        # 安装 weave (http 下载 -L 显示进度，-o 存储位置)
+        curl -L git.io/weave -o /usr/local/bin/weave
+
+        # 调整访问权限
+        chmod a+x /usr/local/bin/weave
+
+        # 查看版本信息
+        weave version
+        weave script 2.4.1
+        weave 2.4.1
+
+        # 关闭防火墙 firewalld，并禁止开启启动
+        systemctl stop firewalld
+        systemctl disable firewalld
+
+        # 改为使用 iptables
+        yum install iptables-services
+
+        # 配置防火墙
+        vim /etc/sysconfig/iptables
+        -----------------------------------------------------------------------------
+        ...
+        # 默认 22 ssh 端口已经开放
+        -A INPUT -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT
+        # 手动打开 80 tcp 端口
+        -A INPUT -p tcp -m state --state NEW -m tcp --dport 80 -j ACCEPT
+        # 手动打开 weave 组网 6783 tcp，udp 连接端口
+        -A INPUT -p tcp -m state --state NEW,ESTABLISHED -m tcp --dport 6783 -j ACCEPT
+        -A INPUT -p udp -m state --state NEW,ESTABLISHED -m udp --dport 6783 -j ACCEPT
+
+        -A INPUT -j REJECT --reject-with icmp-host-prohibited
+        # 注释禁止转发端口
+        #-A FORWARD -j REJECT --reject-with icmp-host-prohibited
+        ...
+        -----------------------------------------------------------------------------
+
+        # 重启防火墙,并设置开机启动
+        service iptables restart
+        chkconfig iptables on
+
+        # 在默认 docker0 网卡前提下启动docker 守护进程，如果使用自定义 br0 网桥，需要将 /usr/local/bin/weave 中的 dcoker0 替换成br0
+        service docker start
+
+        # 启动weave（首次启动，会拉取 weave镜像，并运行名为weave 容器,后续启动docker 守护进程，默认 weave容器也一同启动）
+        weave launch  (直接启动，难以自行组网，不推荐)
+        weave launch --no-detect-tls (关闭自动侦测)
+        weave launch --ipalloc-range 161.100.0.0/16 --no-detect-tls (关闭自动侦测组网，设置使用IP范围 0.0 是可以自定的，与后面16对应，推荐)
+
+        注：正常情况下在，直接返回一串 容器id，而无任何提示信息。
+
+        # 使用 weave 网桥，设置ip 启动容器
+        docker run -itd --network weave --ip 161.100.1.100 --name w1 docker.io/ubuntu:14.04 /bin/bash
+
+        docker attach w1
+
+        ifconfig
+        eth1      Link encap:Ethernet  HWaddr 02:42:ac:12:00:02
+                  inet addr:172.18.0.2  Bcast:0.0.0.0  Mask:255.255.0.0
+                  inet6 addr: fe80::42:acff:fe12:2/64 Scope:Link
+                  UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+                  RX packets:6 errors:0 dropped:0 overruns:0 frame:0
+                  TX packets:5 errors:0 dropped:0 overruns:0 carrier:0
+                  collisions:0 txqueuelen:0
+                  RX bytes:508 (508.0 B)  TX bytes:418 (418.0 B)
+
+        ethwe0    Link encap:Ethernet  HWaddr 5a:6d:c4:25:61:2c
+                  inet addr:161.100.1.100  Bcast:0.0.0.0  Mask:255.255.0.0   <<<<<<
+                  inet6 addr: fe80::586d:c4ff:fe25:612c/64 Scope:Link
+                  UP BROADCAST RUNNING MULTICAST  MTU:1376  Metric:1
+                  RX packets:6 errors:0 dropped:0 overruns:0 frame:0
+                  TX packets:7 errors:0 dropped:0 overruns:0 carrier:0
+                  collisions:0 txqueuelen:0
+                  RX bytes:508 (508.0 B)  TX bytes:550 (550.0 B)
+
+
+    HOST2
+        # 安装 weave (http 下载 -L 显示进度，-o 存储位置)
+        curl -L git.io/weave -o /usr/local/bin/weave
+
+        # 调整访问权限
+        chmod a+x /usr/local/bin/weave
+
+        # 查看版本信息
+        weave version
+        weave script 2.4.1
+        weave 2.4.1
+
+        # 关闭防火墙 firewalld，并禁止开启启动
+        systemctl stop firewalld
+        systemctl disable firewalld
+
+        # 改为使用 iptables
+        yum install iptables-services
+
+        # 配置防火墙
+        vim /etc/sysconfig/iptables
+        -----------------------------------------------------------------------------
+        ...
+        # 默认 22 ssh 端口已经开放
+        -A INPUT -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT
+        # 手动打开 80 tcp 端口
+        -A INPUT -p tcp -m state --state NEW -m tcp --dport 80 -j ACCEPT
+        # 手动打开 weave 组网 6783 tcp，udp 连接端口
+        -A INPUT -p tcp -m state --state NEW,ESTABLISHED -m tcp --dport 6783 -j ACCEPT
+        -A INPUT -p udp -m state --state NEW,ESTABLISHED -m udp --dport 6783 -j ACCEPT
+
+        -A INPUT -j REJECT --reject-with icmp-host-prohibited
+        # 注释禁止转发端口
+        #-A FORWARD -j REJECT --reject-with icmp-host-prohibited
+        ...
+        -----------------------------------------------------------------------------
+
+        # 重启防火墙,并设置开机启动
+        service iptables restart
+        chkconfig iptables on
+
+        # 在默认 docker0 网卡前提下启动docker 守护进程，如果使用自定义 br0 网桥，需要将 /usr/local/bin/weave 中的 dcoker0 替换成br0
+        service docker start
+
+        # 启动weave（首次启动，会拉取 weave镜像，并运行名为weave 容器,后续启动docker 守护进程，默认 weave容器也一同启动）
+        weave launch  (直接启动，难以自行组网，不推荐)
+        weave launch --no-detect-tls (关闭自动侦测)
+        # 此处需要在启动 weave 命令同时 还需要连接 另一台宿主机，此处如果为连接，后续需要手动使用 weave connect 172.16.32.100 配置连接
+        weave launch 172.16.32.100 --ipalloc-range 161.100.0.0/16 --no-detect-tls (关闭自动侦测组网，设置使用IP范围 0.0 是可以自定的，与后面16对应，推荐)
+
+        注：正常情况下在，直接返回一串 容器id，而无任何提示信息。
+
+        # 查看weave信息
+        weave status
+                Version: 2.4.1 (up to date; next check at 2018/09/21 13:59:30)
+
+                Service: router
+               Protocol: weave 1..2
+                   Name: ee:4d:3f:84:cf:cb(docker02)
+             Encryption: disabled
+          PeerDiscovery: enabled
+                Targets: 1
+            Connections: 1 (1 established)   <<<  连接成功
+                  Peers: 2 (with 2 established connections)
+         TrustedSubnets: none
+
+                Service: ipam
+                 Status: ready
+                  Range: 161.100.0.0/16
+          DefaultSubnet: 161.100.0.0/16
+
+                Service: dns
+                 Domain: weave.local.
+               Upstream: 114.114.114.114, 8.8.8.8
+                    TTL: 1
+                Entries: 0
+
+                Service: proxy
+                Address: unix:///var/run/weave/weave.sock
+
+                Service: plugin (legacy)
+             DriverName: weave
+
+        或
+        [root@docker02 docker-test]# weave status connections
+        -> 172.16.32.100:6783    established sleeve 6a:45:cf:be:c0:cb(docker01) mtu=1438
+
+        # 使用 weave 网桥，设置ip 启动容器
+        docker run -itd --network weave --ip 161.100.2.100 --name w1 docker.io/ubuntu:14.04 /bin/bash
+
+        docker attach w1
+
+        ifconfig
+        ...
+        eth1      Link encap:Ethernet  HWaddr 02:42:ac:12:00:02
+                  inet addr:172.18.0.2  Bcast:0.0.0.0  Mask:255.255.0.0
+                  inet6 addr: fe80::42:acff:fe12:2/64 Scope:Link
+                  UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+                  RX packets:6 errors:0 dropped:0 overruns:0 frame:0
+                  TX packets:5 errors:0 dropped:0 overruns:0 carrier:0
+                  collisions:0 txqueuelen:0
+                  RX bytes:508 (508.0 B)  TX bytes:418 (418.0 B)
+
+        ethwe0    Link encap:Ethernet  HWaddr 5a:6d:c4:25:61:2c
+                  inet addr:161.100.2.100  Bcast:0.0.0.0  Mask:255.255.0.0   <<<<<<
+                  inet6 addr: fe80::586d:c4ff:fe25:612c/64 Scope:Link
+                  UP BROADCAST RUNNING MULTICAST  MTU:1376  Metric:1
+                  RX packets:6 errors:0 dropped:0 overruns:0 frame:0
+                  TX packets:7 errors:0 dropped:0 overruns:0 carrier:0
+                  collisions:0 txqueuelen:0
+                  RX bytes:508 (508.0 B)  TX bytes:550 (550.0 B)
+        ...
+
+        # 定位对方宿主机
+        root@b28f1e651dba:/# ping 172.16.32.100
+        PING 172.16.32.100 (172.16.32.100) 56(84) bytes of data.
+        64 bytes from 172.16.32.100: icmp_seq=1 ttl=64 time=0.271 ms
+        64 bytes from 172.16.32.100: icmp_seq=2 ttl=64 time=0.099 ms
+
+        # 定位对方宿主机上的容器 (跨网段访问)
+        root@ee38cee6bb44:/# ping 161.100.1.100
+        PING 161.100.1.100 (161.100.1.100) 56(84) bytes of data.
+        64 bytes from 161.100.1.100: icmp_seq=1 ttl=64 time=7.77 ms
+        64 bytes from 161.100.1.100: icmp_seq=2 ttl=64 time=1.98 ms
+
+        # 停机操作
+        Ctrl+D 退出容器
+
+        docker stop w2
+
+        weave stop
+
+        service docker stop
+
+
+4.不考虑自定义ip快速组织跨宿主机容器互访
+    HOST1
+        # 安装 weave (http 下载 -L 显示进度，-o 存储位置)
+        curl -L git.io/weave -o /usr/local/bin/weave
+
+        # 调整访问权限
+        chmod a+x /usr/local/bin/weave
+
+        # 查看版本信息
+        weave version
+        weave script 2.4.1
+        weave 2.4.1
+
+        # 关闭防火墙 firewalld，并禁止开启启动
+        systemctl stop firewalld
+        systemctl disable firewalld
+
+        # 改为使用 iptables
+        yum install iptables-services
+
+        # 配置防火墙
+        vim /etc/sysconfig/iptables
+        -----------------------------------------------------------------------------
+        ...
+        # 默认 22 ssh 端口已经开放
+        -A INPUT -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT
+        # 手动打开 80 tcp 端口
+        -A INPUT -p tcp -m state --state NEW -m tcp --dport 80 -j ACCEPT
+        # 手动打开 weave 组网 6783 tcp，udp 连接端口
+        -A INPUT -p tcp -m state --state NEW,ESTABLISHED -m tcp --dport 6783 -j ACCEPT
+        -A INPUT -p udp -m state --state NEW,ESTABLISHED -m udp --dport 6783 -j ACCEPT
+
+        -A INPUT -j REJECT --reject-with icmp-host-prohibited
+        # 注释禁止转发端口
+        #-A FORWARD -j REJECT --reject-with icmp-host-prohibited
+        ...
+        -----------------------------------------------------------------------------
+
+        # 重启防火墙,并设置开机启动
+        service iptables restart
+        chkconfig iptables on
+
+        # 在默认 docker0 网卡前提下启动docker 守护进程，如果使用自定义 br0 网桥，需要将 /usr/local/bin/weave 中的 dcoker0 替换成br0
+        service docker start
+
+        # 启动weave
+        weave launch
+
+        # 配置docker容器 自动加入 weave网桥，取消 使用 eval $(weave env --restore)
+        eval $(weave env)
+
+        # 启动容器(该容器将自动加入weave网桥)
+        docker run -it --name w1 docker.io/ubuntu:14.04 /bin/bash
+
+        docker attach w1
+
+        # weave 自动给启动容器配置了主机名
+        root@w1:/# hostname
+        w1.weave.local
+
+        root@w1:/# ifconfig
+        eth0      Link encap:Ethernet  HWaddr 02:42:ac:11:00:02
+                  inet addr:172.17.0.2  Bcast:0.0.0.0  Mask:255.255.0.0
+                  inet6 addr: fe80::42:acff:fe11:2/64 Scope:Link
+                  UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+                  RX packets:20 errors:0 dropped:0 overruns:0 frame:0
+                  TX packets:25 errors:0 dropped:0 overruns:0 carrier:0
+                  collisions:0 txqueuelen:0
+                  RX bytes:1576 (1.5 KB)  TX bytes:2202 (2.2 KB)
+
+        ethwe     Link encap:Ethernet  HWaddr ee:4b:c5:7a:23:1d
+                  inet addr:10.32.0.1  Bcast:10.47.255.255  Mask:255.240.0.0   <<<< weave随机分发网段，同宿主机网段一致 10.32.0.x
+                  inet6 addr: fe80::ec4b:c5ff:fe7a:231d/64 Scope:Link
+                  UP BROADCAST RUNNING MULTICAST  MTU:1376  Metric:1
+                  RX packets:36 errors:0 dropped:0 overruns:0 frame:0
+                  TX packets:24 errors:0 dropped:0 overruns:0 carrier:0
+                  collisions:0 txqueuelen:0
+                  RX bytes:2368 (2.3 KB)  TX bytes:1420 (1.4 KB)
+        ...
+
+
+    HOST2
+        # 安装 weave (http 下载 -L 显示进度，-o 存储位置)
+        curl -L git.io/weave -o /usr/local/bin/weave
+
+        # 调整访问权限
+        chmod a+x /usr/local/bin/weave
+
+        # 查看版本信息
+        weave version
+        weave script 2.4.1
+        weave 2.4.1
+
+        # 关闭防火墙 firewalld，并禁止开启启动
+        systemctl stop firewalld
+        systemctl disable firewalld
+
+        # 改为使用 iptables
+        yum install iptables-services
+
+        # 配置防火墙
+        vim /etc/sysconfig/iptables
+        -----------------------------------------------------------------------------
+        ...
+        # 默认 22 ssh 端口已经开放
+        -A INPUT -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT
+        # 手动打开 80 tcp 端口
+        -A INPUT -p tcp -m state --state NEW -m tcp --dport 80 -j ACCEPT
+        # 手动打开 weave 组网 6783 tcp，udp 连接端口
+        -A INPUT -p tcp -m state --state NEW,ESTABLISHED -m tcp --dport 6783 -j ACCEPT
+        -A INPUT -p udp -m state --state NEW,ESTABLISHED -m udp --dport 6783 -j ACCEPT
+
+        -A INPUT -j REJECT --reject-with icmp-host-prohibited
+        # 注释禁止转发端口
+        #-A FORWARD -j REJECT --reject-with icmp-host-prohibited
+        ...
+        -----------------------------------------------------------------------------
+
+        # 重启防火墙,并设置开机启动
+        service iptables restart
+        chkconfig iptables on
+
+        # 在默认 docker0 网卡前提下启动docker 守护进程，如果使用自定义 br0 网桥，需要将 /usr/local/bin/weave 中的 dcoker0 替换成br0
+        service docker start
+
+        # 启动weave
+        weave launch 172.16.32.100
+        cannot locate running docker daemon   <<<< launch 定位 172.16.32.100 失败，后续还要继续使用 weave connect 172.16.32.10 连接
+        Warning: unable to detect proxy TLS configuration. To enable TLS, launch the proxy with 'weave launch' and supply TLS options. To suppress this warning, supply the '--no-detect-tls' option.
+        ad67ca8b2643326c6a0549a947aa8765e4ba10368d76e369fc6906bede12a06b
+
+        weave status
+                Version: 2.4.1 (up to date; next check at 2018/09/21 12:01:25)
+
+                Service: router
+               Protocol: weave 1..2
+                   Name: ee:4d:3f:84:cf:cb(docker02)
+             Encryption: disabled
+          PeerDiscovery: enabled
+                Targets: 1
+            Connections: 1 (1 established)   <<<< 成功连接
+                  Peers: 2 (with 2 established connections)
+         TrustedSubnets: none
+
+                Service: ipam
+                 Status: ready
+                  Range: 10.32.0.0/12
+          DefaultSubnet: 10.32.0.0/12
+
+                Service: dns
+                 Domain: weave.local.
+               Upstream: 114.114.114.114, 8.8.8.8
+                    TTL: 1
+                Entries: 1
+
+                Service: proxy
+                Address: unix:///var/run/weave/weave.sock
+
+                Service: plugin (legacy)
+             DriverName: weave
+
+
+        # 配置docker容器 自动加入 weave网桥，取消 使用 eval $(weave env --restore)
+        eval $(weave env)
+
+        # 启动容器(该容器将自动加入weave网桥)
+        docker run -it --name w2 docker.io/ubuntu:14.04 /bin/bash
+
+        docker attach w2
+
+        # weave 自动给启动容器配置了主机名
+        root@w1:/# hostname
+        w2.weave.local
+
+       root@w2:/# ifconfig
+       eth0      Link encap:Ethernet  HWaddr 02:42:ac:11:00:02
+                 inet addr:172.17.0.2  Bcast:0.0.0.0  Mask:255.255.0.0
+                 inet6 addr: fe80::42:acff:fe11:2/64 Scope:Link
+                 UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+                 RX packets:12 errors:0 dropped:0 overruns:0 frame:0
+                 TX packets:6 errors:0 dropped:0 overruns:0 carrier:0
+                 collisions:0 txqueuelen:0
+                 RX bytes:1016 (1.0 KB)  TX bytes:508 (508.0 B)
+
+       ethwe     Link encap:Ethernet  HWaddr f6:9b:41:a9:d9:ae
+                 inet addr:10.44.0.0  Bcast:10.47.255.255  Mask:255.240.0.0  <<<< 不同宿主机，weave 分配网段不一致，解决组网 ip 冲突问题
+                 inet6 addr: fe80::f49b:41ff:fea9:d9ae/64 Scope:Link
+                 UP BROADCAST RUNNING MULTICAST  MTU:1376  Metric:1
+                 RX packets:9 errors:0 dropped:0 overruns:0 frame:0
+                 TX packets:4 errors:0 dropped:0 overruns:0 carrier:0
+                 collisions:0 txqueuelen:0
+                 RX bytes:766 (766.0 B)  TX bytes:300 (300.0 B)
+
+        # 跨主机，容器互访
+        root@w2:/# ping 10.32.0.1
+        PING 10.32.0.1 (10.32.0.1) 56(84) bytes of data.
+        64 bytes from 10.32.0.1: icmp_seq=1 ttl=64 time=9.18 ms
+        64 bytes from 10.32.0.1: icmp_seq=2 ttl=64 time=1.43 ms
+        64 bytes from 10.32.0.1: icmp_seq=3 ttl=64 time=1.26 ms
+
+        # 访问对方宿主机 失败
+        root@w2:/# ping 172.16.32.100
+
+        # 访问外网失败
+        root@w2:/# ping www.baidu.com
+        ping: unknown host www.baidu.com
+
+
+
+
+

@@ -1,0 +1,16 @@
+1.注册 tomcat 组件
+Run >> Edit Configuration >> 左上角 “+” >> Default >> Tomcat Server(Local) >>
+    Server 选项卡 -> Application Server 定位到本地解压的 Apache-Tomcat-9.0.8 根路径
+    Deployment 选项卡 “+” >> Artifact 选择需要发布模块
+
+2.启动 web 程序
+    coding界面坐下叫 Application Server 唤出 刚注册的Tomcat 组件 >> 点击运行 即可 运行 webapp
+
+3.日志追踪: 总共会出现 3块日志窗口 Server 打包窗口，Catalina_log 部署窗口, Localhost_Log 运行监控
+
+
+
+
+
+
+

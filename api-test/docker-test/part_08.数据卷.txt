@@ -1,0 +1,217 @@
+1.数据卷 Data Volume
+    * 经过特殊设计的存储目录，可以绕过联合文件系统(UFS)，为一个或多个容器提供访问；
+    * 数据卷设计目的是为了数据永久化，其完全独立于容器的声明周期，docker不会再容器删除时，删除其挂载的数据卷，也不存在类似垃圾回收机制
+      对容器引用的数据卷进行处理。
+
+    特点：独立于docker 存在与宿主机文件系统中，与docker 容器生存周期分离；
+        docker数据卷可以是文件，也可以是目录；
+        docker容器可以通过数据卷实现与宿主机的数据交换。
+        docker容器间也可以通过数据卷实现数据共享。
+
+   # 数据卷在容器启动时初始化，如果容器使用的镜像在挂载点包含了数据，这些数据会拷贝到新初始化的数据卷中。
+   # 数据卷可以在容器间共享和重用
+   # 可以对数据卷中的内容直接修改，并立即生效；
+   # 数据卷的变化不会影响镜像的更新
+   # 数据卷会一直存在，即使挂载它的容器已经被删除了。
+
+2.命令行挂载数据卷
+    # 注必须使用绝对路径，目录命名法中不支持"./", 挂载和被挂在路径已经存在直接使用，否则就创建新的
+    docker run -itd -v /opt/softwares/docker-test/data1/:/data1 --name vol1 whohow20094702/test-net
+    docker inspect vol1
+    ...
+      "Mounts": [
+                {
+                    "Type": "bind",
+                    "Source": "/opt/softwares/docker-test/data1",
+                    "Destination": "/data1",
+                    "Mode": "",
+                    "RW": true,  <<< 开发权限，默认为 755，经测试，宿主机可容器内部均可以写入
+                    "Propagation": ""
+                }
+            ],
+    ...
+
+
+3.命令行创建只读数据卷
+     docker run -itd -v /opt/softwares/docker-test/data1/:/data1:ro --name vol2 whohow20094702/test-net
+        docker inspect vol2
+        ...
+           "Mounts": [
+                      {
+                          "Type": "bind",
+                          "Source": "/opt/softwares/docker-test/data1",
+                          "Destination": "/data1",
+                          "Mode": "ro",  <<< 只读权限，宿主机可写入，容器内部只读
+                          "RW": false,
+                          "Propagation": "rprivate"  <<<
+                      }
+                  ],
+        ...
+
+
+4.Dockerfile Volume 指令
+    Volume ["container_dir1","container_dir2","..."]  使用Dockerfile Volume 指令指定的数据卷，运行容器默认直接在宿主机创建
+    类似 /var/lib/docker/volumes/xxxxxxx/_data目录，映射到容器指定目录container_dir中。每运行一个新容器，创建宿主机中创建新目录。
+    因此Volume指令指定的数据卷，在容器间是无法共享的，而 -v 启动选项是在容器间是可以共享的。
+
+    cd ubuntu-test/
+    vim Dockerfile
+    ------------------------------
+    # Test net
+    FROM ubuntu:14.04
+    RUN apt-get install -y ping
+    RUN apt-get update
+    RUN apt-get install -y nginx
+    RUN apt-get install -y curl
+    Volume ["data2","data3"]  <<< # 经测算 "data2:ro" 不能指定权限，使用 RUN chmod 700 /data2 也不能修改权限
+    EXPOSE 80
+    CMD /bin/bash
+    ------------------------------
+
+    docker build --tag="whohow20094702/test-vol" ./
+
+    docker run -itd --name vol3 whohow20094702/test-vol
+
+    docker attach vol3
+
+    ls /
+    bin  boot  data2  data3  dev  etc  home  lib  lib64  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
+               ^^^^^  ^^^^^
+    # Dockerfile 预设挂载同时，通过 -v 手动挂载
+    docker run -itd --name -v /opt/softwares/docker-test/data1:/data vol4 whohow20094702/test-vol
+
+    docker inspect vol4
+    ....
+    "Mounts": [
+                {
+                    "Type": "bind",
+                    "Source": "/opt/softwares/docker-test/data1",  <<< 手动挂载的可在容器间共享
+                    "Destination": "/data",
+                    "Mode": "",
+                    "RW": true,
+                    "Propagation": "rprivate"
+                },
+                {
+                    "Type": "volume",
+                    "Name": "4a8e927f82a09a2ae11b76f97be95751b659878f1041751c4e05edc7c850b238",
+                    "Source": "/var/lib/docker/volumes/4a8e927f82a09a2ae11b76f97be95751b659878f1041751c4e05edc7c850b238/_data",  <<< 预设挂载的不能共享
+                    "Destination": "data2",
+                    "Driver": "local",
+                    "Mode": "",
+                    "RW": true,
+                    "Propagation": ""
+                },
+                {
+                    "Type": "volume",
+                    "Name": "e782d702664838274a38258a4f72fb5a42358655005ce24d1890760607f30f56",
+                    "Source": "/var/lib/docker/volumes/e782d702664838274a38258a4f72fb5a42358655005ce24d1890760607f30f56/_data",
+                    "Destination": "data3",
+                    "Driver": "local",
+                    "Mode": "",
+                    "RW": true,
+                    "Propagation": ""
+                }
+            ],
+            ....
+
+
+    docker inspect vol3
+    ....
+     "Mounts": [
+                {
+                    "Type": "volume",
+                    "Name": "752b63bd832f5a7792663727012da922ff48a1d13e0fb642015532b57c0d7453",
+                    "Source": "/var/lib/docker/volumes/752b63bd832f5a7792663727012da922ff48a1d13e0fb642015532b57c0d7453/_data",  <<< 预设挂载，在宿主机中目录每次都创建新的
+                    "Destination": "data2",
+                    "Driver": "local",
+                    "Mode": "",
+                    "RW": true,
+                    "Propagation": ""
+                },
+                {
+                    "Type": "volume",
+                    "Name": "cd0fafe809eb557eff267a2cdf42852cc0e37494a35e42431ef0a6ba3a8ce57d",
+                    "Source": "/var/lib/docker/volumes/cd0fafe809eb557eff267a2cdf42852cc0e37494a35e42431ef0a6ba3a8ce57d/_data",
+                    "Destination": "data3",
+                    "Driver": "local",
+                    "Mode": "",
+                    "RW": true,
+                    "Propagation": ""
+                }
+            ],
+
+
+5.数据卷容器
+    挂载了数据卷的容器，在被其他容器在启动时以 --volumes-from 参数引用时，其他容器也能够访问到宿主机上被挂载对的数据目录。
+    Container_1  ->
+    Container_2  ->  (--volumes-from)  Container_0 (-v / --volumes-from) ->   Host
+    Container_3  ->
+
+    # 删除全部已经存在容器
+    docker rm vol1 vol2 ....
+
+    # 通过 -v 选项挂载数据卷
+    docker run -itd -v /opt/softwares/docker-test/data1:/data1 --name vol0 docker.io/centos
+
+    docker inspect vol0 | grep Source
+    "Source": "/opt/softwares/docker-test/data1",
+
+    docker attach vol0
+    anaconda-post.log  bin  data1  dev  etc  home  lib  lib64  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
+                             ^^^^
+    echo "hello vol" > data1/1.txt
+
+    cat /opt/softwares/docker-test/data1/1.txt
+    hello vol
+
+    # 通过 -volumes-from 参数，引用 数据卷容器vol0 挂载的数据卷 （此引用可看成是宿主机数据卷目录地址的引用，数据卷容器vol0充当传递配置角色）
+    docker run -itd --volumes-from vol0 --name vol1 docker.io/centos
+
+    # vol1 与 vol0 引用的是同一个宿主机目录，因此即便数据卷容器vol0被删除,vol1 挂载的数据卷仍旧存在
+    docker inspect vol1 | grep Source
+    "Source": "/opt/softwares/docker-test/data1",
+
+    docker stop vol0
+
+    docker ps
+    CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+    a146c51c1dc4        docker.io/centos    "/bin/bash"         5 minutes ago       Up 5 minutes                            vol1
+
+    # 即便数据卷容器被删除，引用数据卷容器所挂载的数据卷依旧存在
+    docker inspect vol1 | grep Source
+    "Source": "/opt/softwares/docker-test/data1",
+
+    docker attach vol1
+    echo "hello " >> data1/1.txt
+
+    cat /opt/softwares/docker-test/data1/1.txt
+    hello vol
+    hello
+
+    # 挂载了数据卷的容器被其他容器引用时，自己也成为了数据卷容器
+    docker run -itd --volumes-from --name vol2 docker.io/centos
+
+    docker inspect vol2 | grep Source
+    "Source": "/opt/softwares/docker-test/data1",
+
+6.数据卷容器中数据的备份与还原
+
+                <-(-v)  SharedVolume
+    Container
+                <-(-v)  BackupVolume
+
+    # 使用两个 -v 挂载宿主机文件系统两个目录， docker 容器启动时，获取 /data1 数据，通过压缩命令，将数据传入 /backup ,从而实现数据的备份
+    docker run -itd -v /opt/softwares/docker-test/data1/:/data1 -v /opt/softwares/docker-test/backup:/backup --name vol0 docker.io/centos tar cvf /backup/data1.tar.gz /data1
+
+7.数据拷贝
+    # 将宿主机 /opt/1.txt 文件拷贝搭配 master 容器 /opt 目录
+    docker cp /opt/1.txt master:/opt/
+
+    # 将master 容器/opt/1.txt 文件拷贝到宿主机目录
+    docker cp master:/opt/1.txt /opt
+
+
+
+
+
+

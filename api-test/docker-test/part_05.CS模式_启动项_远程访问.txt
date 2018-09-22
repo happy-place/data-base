@@ -1,0 +1,217 @@
+1.Docker 的C/S模式
+    User <-> Docker-CLI 客户端 <-> Docker 守护进程
+
+2.Remote API
+    Restful风格API
+    支持 STDID STDOUT STDERROR 交互
+    docker_remote_api: https://docs.docker.com/develop/sdk/
+
+3.docker客户端与守护进程连接方式
+    unix:///var/run/docker.sock
+    tcp://host:port
+    fd://socketfd
+
+
+    # 通过docker_remote_api 访问 docker,相当于先执行 nc -U /var/run/docker.sock，访问remote_api，然后发送http请求GET /containers/json HTTP/1.0
+    # echo -e 以转义格式处理特殊字段, echo -n 不换行输出
+    [huhao@localhost ~]$ echo -e "GET /containers/json HTTP/1.0\r\n" | nc -U /var/run/docker.sock
+    HTTP/1.0 200 OK
+    Api-Version: 1.26
+    Content-Type: application/json
+    Docker-Experimental: false
+    Server: Docker/1.13.1 (linux)
+    Date: Mon, 10 Sep 2018 10:06:41 GMT
+    Content-Length: 3
+
+    []
+
+    等效于 docker info
+
+4.docker 启动配置选项
+    docker -d [options]
+        -d 守护经常方式运行docker
+        [options]
+            -D,--debug=false 开启debug模式
+            -e,--exec-driver="native" 驱动
+            -g,--graph="/var/lib/docker" # 图形化
+            --icc=true
+            -l,--log-level="info"
+            --label=[]
+            -p,--pidfile="/var/run.docker.pid" 进程id
+            -G,--group="docker"  启动用户组
+            -H,--host=[]        指定启动host
+            --tls=false          授信操作
+            --tlscacert="/home/sven/.docker/ca.pem"
+            --tlscert="/home/sven/.docker/cert.pem"
+            --tlskey="/home/sven/.docker/key.pem"
+            --tlsverify=false
+            --api-enable-cors=false 禁止开启remote_api
+            -s,--storage-driver="" 存储
+            --selinux-enabled=false  安全
+            --storage-opt=[]  存储选项
+            --insecure-registry=[]  远程仓库
+            --registry-mirror=[]    仓库镜像
+            -b,--bridge="" 网桥
+            --bip=""        绑定ip
+            --fixed-cidr=""
+            --fixed-cidr-v6=""
+            --dns=[]      DNS
+            --dns-search=[]
+            --ip=0.0.0.0        IP
+            --ip-forward=true
+            --ip-masq=true
+            --iptables=true
+            --ipv6=false
+            --mtu=0
+
+5.启动配置文件
+    ubuntu : /etc/default/docker
+    centos: /etc/sysconfig/docker
+
+    vim /etc/sysconfig/docker
+    -----------------------------------------------------------------------------------------
+    # /etc/sysconfig/docker
+
+    # Modify these options if you want to change the way the docker daemon runs
+    OPTIONS='--selinux-enabled=false --log-driver=journald --signature-verification=false'
+    OPTIONS='--label name=test_options'  <<<<  通过labels 参数自己定义kv
+    if [ -z "${DOCKER_CERT_PATH}" ]; then
+        DOCKER_CERT_PATH=/etc/docker
+    fi
+    ...
+    -----------------------------------------------------------------------------------------
+
+    service docker restart
+    [huhao@localhost ~]$ docker info
+    .....
+    Username: whohow20094702
+    Registry: https://index.docker.io/v1/
+    Labels:   <<<<<
+     name=test_options
+    Experimental: false
+    Insecure Registries:
+     127.0.0.0/8
+    Registry Mirrors:
+     http://d52d7f09.m.daocloud.io
+    Live Restore Enabled: false
+    .....
+
+6.查看docker守护进程运行状态
+    [root@localhost docker-test]# service docker status
+    Redirecting to /bin/systemctl status  docker.service
+    ● docker.service - Docker Application Container Engine
+       Loaded: loaded (/usr/lib/systemd/system/docker.service; disabled; vendor preset: disabled)
+       Active: active (running) since Mon 2018-09-10 03:39:55 PDT; 17min ago
+         Docs: http://docs.docker.com
+     Main PID: 54981 (dockerd-current)
+
+7.远程访问
+    docker 客户端与守护进程连接方式有：
+        unix:///var/run/docker.sock  <<< 默认
+        tcp://host:port
+        fd://socketfd
+
+    1).准备两台 Ceentos7 虚拟机，并分别安装相同版本docker 环境
+       通过克隆链接创建新虚拟环境即可
+        docker-01 172.16.32.100
+        docker-02 172.16.32.101
+
+    2).修改各自docker启动配置文件 /etc/sysconfig/docker，使用-H 选项将默认访问守护进程方式从 unix://var/run/docker.socket 改为 tcp://0.0.0.0:2375
+       并使用 --labels name='xx' 添加服务标识,分别启动docker 服务
+        docker-01:
+        vim /etc/sysconfig/docker
+        --------------------------------------------------------------------------------------
+        ...
+        OPTIONS='--selinux-enabled=false --log-driver=journald --signature-verification=false'
+        OPTIONS='--label name=test_options1 -H tcp://0.0.0.0:2375'  <<<<
+        ...                       ^^^^^^^             ^^^^^^
+        --------------------------------------------------------------------------------------
+        service docker restart (此时将默认访问入口从 unix:///var/run/docker.sock 切换为 remote_api的 tcp://ip:port形式)
+
+
+        docker-02:
+        vim /etc/sysconfig/docker
+        --------------------------------------------------------------------------------------
+        ...
+        OPTIONS='--selinux-enabled=false --log-driver=journald --signature-verification=false'
+        OPTIONS='--label name=test_options2 -H tcp://0.0.0.0:2375'  <<<<
+        ...                       ^^^^^^^             ^^^^^^
+        --------------------------------------------------------------------------------------
+        service docker restart
+
+
+    3).交叉使用 curl ip:port 方式访问 docker守护进程
+        docker-01, docker-02 此时宿主机 ip 分别为 172.16.32.100、172.16.32.101
+        docker-01 上访问 docker-02
+        curl http://172.16.32.100:2375/v1.26/info | grep "Labels"
+        ...
+        "Labels":["name=test_options2"],
+        ...
+
+         反向访问(略)
+
+
+    4).使用docker客户端命令交叉访问
+        docker-01 上访问 docker-02
+        docker -H tcp://172.16.32.101:2375 info
+        ....
+        Registry: https://index.docker.io/v1/
+        Labels:
+         name=test_options2
+        Experimental: false
+        Insecure Registries:
+         127.0.0.0/8
+        Registry Mirrors:
+         http://d52d7f09.m.daocloud.io
+         ....
+
+    5).频繁远程访问，需要在shell 环境，配置 DOCKER_HOST 环境变量，取消时，只需要置空
+        docker-01 -> docker-02
+        root@localhost ~]# export DOCKER_HOST="172.16.32.101"  或 export DOCKER_HOST="tcp://172.16.32.101"
+        [root@localhost ~]# docker info
+        ...
+        Registry: https://index.docker.io/v1/
+        Labels:
+         name=test_options2  <<<
+        Experimental: false
+        Insecure Registries:
+         127.0.0.0/8
+        Registry Mirrors:
+         http://d52d7f09.m.daocloud.io
+        ...
+
+    6).远程访问和本地访问兼顾
+        docker-01 -> docker-02
+        vim /etc/sysconfig/docker
+        -------------------------------------------------------------------------------------------
+        ...
+        OPTIONS='--selinux-enabled=false --log-driver=journald --signature-verification=false'
+        OPTIONS='--label name=test_options1 -H tcp://0.0.0.0:2375 -H unix:///var/run/docker.sock'  <<<<
+        ...                                  ^^^ 对外暴露remote_api   ^^^ 本地访问 api
+        -------------------------------------------------------------------------------------------
+
+        export DOCKER_HOST=""
+        service docker restart
+
+        docker info
+        ...
+        Registry: https://index.docker.io/v1/
+        Labels:
+         name=test_options2
+        Experimental: false
+        Insecure Registries:
+         127.0.0.0/8
+        Registry Mirrors:
+        ...
+
+
+
+
+
+
+
+
+
+
+
+

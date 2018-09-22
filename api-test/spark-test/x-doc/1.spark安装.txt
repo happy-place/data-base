@@ -1,0 +1,245 @@
+
+cd /Users/huhao/software/virtual_space/spark_lab
+vim data/1.txt
+---------------------------
+aa bb aa b
+b a c dd cc
+a c cc dd b
+---------------------------
+
+spark-shell
+
+val lines1=sc.textFile("data/1.txt")
+val lines2=sc.textFile("data/1.txt")
+
+val words1=lines1.flatMap(line=>line.split(" ")).map((_,1)).reduceByKey((_+_))
+val words2=lines2.flatMap(line=>line.split(" ")).map((_,1)).reduceByKey((_+_))
+
+words1.sortBy(_._1).saveAsTextFile("hdfs://tmp/wc/out")
+words2.repartition(1).saveAsTextFile("hdfs://tmp/wc/out2")
+words2.coalesce(1).sortBy(_._2,true)  // 压缩分区
+
+words1.foreach(println)
+words2.foreach(println)
+---------------------------
+(aa,2)
+(dd,2)
+(b,3)
+(bb,1)
+(cc,2)
+(a,2)
+(c,2)
+---------------------------
+
+1.spark 集群安装
+    下载 spark-2.1.1-bin-hadoop2.7.tgz
+    解压  tar -xvf spark-2.1.1-bin-hadoop2.7.tgz
+    cd spark-2.1.1-bin-hadoop2.7/conf
+    配置slaves节点
+        vim slaves  >> lcoalhost
+    配置spark-master
+        vim spark-env.sh 配置
+        HADOOP_HOME, JAVA_HOME
+        SPARK_MASTER_HOST localhost
+        SPARK_MASTER_PORT 70
+
+    配置环境
+    vim /etc/profile , ~/.bash_profile, ~/.bashrc
+    ------------------------------------------------
+    # spark
+    SPARK_HOME=/Users/huhao/software/spark-2.1.1-bin-hadoop2.7
+    PATH=$PATH:$SPARK_HOME/bin
+    export SPARK_HOME PATH
+
+    alias spark_on="cd /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/ && sbin/start-all.sh && sbin/start-history-server.sh hdfs://localhost:9000/tmp/spark/eventLog/"
+    alias spark_off="cd /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/ && sbin/stop-history-server.sh && sbin/stop-all.sh"
+
+    ------------------------------------------------
+
+    启动测试 (注意与 hadoop 的 start-all.sh 区分开)
+        sbin/start-all.sh
+        登录 SparkWebUI http://localhost:8080
+
+
+2.访问 spark 集群
+    本地连接：spark-shell
+    Spark context available as 'sc' (master = local[*], app id = local-1529223508416).
+
+    集群连接：spark-shell --master spark://localhost:7077
+    Spark context available as 'sc' (master = spark://localhost:7077, app id = app-20180617161936-0001).
+
+    注： 每次使用 spark-shell 登录spark 时，在当前目录下都会生成 metastore_db derby.log 目录 和 文件，通一个目录下不得两次登录 spark-shell 否则 metastore_db derby.log 会冲突
+
+    退出 scala> :quit
+
+3.作业提交
+    注：如果jar 中通过 setMaster 设置了master 地址，就无需再提交job 时，通过 --master 设置了。
+    集群提交
+    /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/bin/spark-submit \
+    --class org.apache.spark.examples.SparkPi \
+    --master spark://localhost:7077 \
+    --executor-memory 1G \
+    --total-executor-cores 2 \
+    /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/examples/jars/spark-examples_2.11-2.1.1.jar 100
+
+    Pi is roughly 3.1418523141852313
+
+    --class 指定 jar 主类
+    --master 指定集群地址
+    --deploy-mode 可选,默认client, client 模式 client 提交后不退出，直接充当driver, cluster (standalone/yarn)模式，client 提交后直接退出
+    --conf 以 KV 形式添加spark 配置
+    jar spark Jar 包
+    参数
+
+
+
+4.wordcount
+    交互式编程
+        本地登录模式直接在本地打印显示：spark-shell
+
+        集群登录模式，在SparkWebUI 查看打印信息：http://localhost:8080 >> Running Application >> app_id >> stdout
+            spark-shell --master spark://localhost:7077
+            val lines=sc.textFile("/Users/huhao/software/virtual_space/spark_lab/data",2)
+            lines.flatMap(_.split(" ")).map((_,1)).reduceByKey(_+_).repartition(1).sortBy(_._2,true).foreach(println)
+
+    提交业务jar
+    spark-submit
+
+5.日志查看
+   方案1：SparkWebUi 4040 端口查看最终输出
+
+   方案2：配置historyserver 查看过程日志
+        vim spark-default.conf
+           --------------------------------------------------
+           spark.eventLog.enabled  true
+           spark.eventLog.dir      hdfs://localhost:9000/tmp/spark/eventLog
+           --------------------------------------------------
+
+        hdfs dfs -mkdir -p /tmp/spark/eventLog
+
+        vim spark-env.sh
+            --------------------------------------------------
+            export SPARK_HISTORY_OPTS="-Dspark.history.ui.port=4000 -Dspark.history.retainedApplications=3 -Dspark.history.fs.logDirectory=hdfs://localhost:9000/tmp/spark/eventLog"
+            可查看详细 rdd
+
+        启动日志服务 sbin/start-history-server.sh hdfs://localhost:9000/tmp/spark/eventLog/
+
+        配置别名
+        vim /etc/profile , ~/.bash_profile, ~/.bashrc
+        alias spark_on="cd /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/ && sbin/start-all.sh && sbin/start-history-server.sh hdfs://localhost:9000/tmp/spark/eventLog/"
+        alias spark_off="cd /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/ && sbin/stop-history-server.sh && sbin/stop-all.sh"
+
+        注：1.如果没没配置日志历史服务，只能在运行期间通过 http://localhost:4040/jobs/ 端访问
+            2.正常配置日志服务时，通过绑定的4000端口访问  http://localhost:4000
+            3.本地local模式提价的打印信息在本地显示,历史中不会出现任何记录信息
+
+            1) 未设置  --deploy-mode 默认为client 提交，所有打印信息直接在client 提交端显示
+            "--master spark://localhost:7077 "提交集群运行
+            /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/bin/spark-submit \
+            --class com.big.data.spark.rdd.WordCountTest \
+            --master spark://localhost:7077 \
+            --executor-memory 1G \
+            --total-executor-cores 2 \
+            /Users/huhao/software/idea_proj/data-base/api-test/spark-test/spark-rdd/target/spark-rdd-1.0-SNAPSHOT.jar
+
+            "--master local[*]" 提交本地运行
+            /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/bin/spark-submit \
+            --class com.big.data.spark.rdd.WordCountTest \
+            --master local[*] \
+            --executor-memory 1G \
+            --total-executor-cores 2 \
+            /Users/huhao/software/idea_proj/data-base/api-test/spark-test/spark-rdd/target/spark-rdd-1.0-SNAPSHOT.jar
+
+            2）设置了 --deploy-mode cluster 为集群提交，且是 cluster[standalone] 模式，打印信息在 8080 WebUi 展示
+            /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/bin/spark-submit \
+            --class com.big.data.spark.rdd.WordCountTest \
+            --deploy-mode cluster \
+            --master spark://localhost:7077 \
+            --executor-memory 1G \
+            --total-executor-cores 2 \
+            /Users/huhao/software/idea_proj/data-base/api-test/spark-test/spark-rdd/target/spark-rdd-1.0-SNAPSHOT.jar
+
+            3) jar 传参，定义输入，输出，线程数
+            jar=/Users/huhao/software/idea_proj/data-base/api-test/spark-test/spark-rdd/target/wordcount-test-jar-with-dependencies.jar
+            master='local[*]'
+            input='hdfs://localhost:9000/tmp/spark/wc/in'
+            output='hdfs://localhost:9000/tmp/spark/wc/out'
+
+            /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/bin/spark-submit \
+            --class com.big.data.spark.rdd.WordCountTest \
+            --deploy-mode cluster \
+            --master spark://localhost:7077 \
+            --executor-memory 1G \
+            --total-executor-cores 2 \
+            ${jar} ${master} ${input} ${output}
+
+
+6。作业提交
+    1.Standalone 模式
+        a. Master 管理整个集群，负责资源分配，单独JVM进程
+        b.Worker 负责Executor,独立JVM进程
+        c.Driver 下载jar包，召集 worker 干活，最后收集结果
+        d.Executor 具体执行任务的容器，单独JVM进程
+
+        client 模式：Driver运行在提交端
+        cluster 模式：Driver运行在某个Executor中
+
+    2.Yarn 模式
+        a.ResourceManager => master 负责资源调度
+        b.NodeManager => driver worker 执行计算
+        c.无需启动Spark集群就可以运行。
+
+        vim /Users/huhao/software/hadoop-2.7.2/etc/hadoop/yarn-site.xml
+        ------------------------------------------------------
+        <property>
+            <name>yarn.nodemanager.pmem-check-enable</name>
+            <value>false</value>
+        </property>
+        <property>
+            <name>yarn.nodemanager.vmem-check-enable</name>
+            <value>false</value>
+        </property>
+        ------------------------------------------------------
+
+        vim /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/conf/spark-env.sh
+        ------------------------------------------------------
+        HADOOP_CONF_DIR="/Users/huhao/software/hadoop-2.7.2/etc/hadoop"
+        YARN_CONF_DIR="/Users/huhao/software/hadoop-2.7.2/etc/hadoop"
+        ------------------------------------------------------
+        注：一旦让spark 自主发现hdfs 配置时，所有路径全部按 hdfs 路径处理，使用"file:///User/huhao/software/tmp" 解析本地文件。
+
+        启动 hdfs yarn spark_his
+        配置别名
+        vim /etc/profile
+        ------------------------------------------------------
+        alias spark_his_on="cd /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/ && sbin/start-history-server.sh hdfs://localhost:9000/tmp/spark/eventLog/"
+        alias spark_his_off="cd /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/ && sbin/stop-history-server.sh && sbin/stop-all.sh"
+        ------------------------------------------------------
+        /Users/huhao/software/hadoop-2.7.2/sbin/start-all.sh
+        spark_his_on
+
+        /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/bin/spark-submit \
+        --class org.apache.spark.examples.SparkPi \
+        --master yarn \
+        --executor-memory 1G \
+        --total-executor-cores 2 \
+        /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/examples/jars/spark-examples_2.11-2.1.1.jar 100
+
+        /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/bin/spark-submit \
+        --class com.big.data.spark.rdd.WordCountClusterNodeSubmit \
+        --master yarn \
+        --executor-memory 1G \
+        --total-executor-cores 2 \
+        /Users/huhao/software/idea_proj/data-base/api-test/spark-test/spark-rdd/target/spark-rdd.jar
+
+        启动 spark-shell: spark-shell --master yarn
+
+
+总结：
+    提交方式：本地提交 --master local , 集群提交 --master cluster (standalone), --master yarn (yarn)
+    本地提交 client 提交完毕，不会退出，而是充当 driver,下载jar,收集汇总结果
+    集群提交 client 提交完毕，直接退出，随机挑选 executor 充当 driver,其余充当 worker
+    yarn 模式 无需启动spark 集群，即可运行spark
+
+
+

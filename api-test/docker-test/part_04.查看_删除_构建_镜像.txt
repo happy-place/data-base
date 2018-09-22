@@ -1,0 +1,699 @@
+1.Docker images:容器基石，层叠只读文件系统，通过联合加载技术(union mount)实现
+    add Apache  < 服务应用
+    add emacs   < 基础应用
+    rootfs(Ubuntu) < 基础镜像
+    bootfs  << 启动镜像
+
+    存储位置
+    [root@localhost docker-test]# ls /var/lib/docker/
+    containers  image  network  overlay2  plugins  swarm  tmp  trust  volumes
+
+    # docker info 查看docker 镜像信息
+    [root@localhost docker-test]# docker info
+    Containers: 4
+     Running: 1
+     Paused: 0
+     Stopped: 3
+    Images: 2
+    Server Version: 1.13.1
+    Storage Driver: overlay2
+     Backing Filesystem: xfs
+     Supports d_type: true
+     Native Overlay Diff: false
+    Logging Driver: journald
+    Cgroup Driver: systemd
+    Plugins:
+     Volume: local
+     Network: bridge host macvlan null overlay
+    Swarm: inactive
+    Runtimes: runc docker-runc
+    Default Runtime: docker-runc
+    Init Binary: /usr/libexec/docker/docker-init-current
+    containerd version:  (expected: aa8187dbd3b7ad67d8e5e3a15115d3eef43a7ed1)
+    runc version: 5eda6f6fd0c2884c2c8e78a6e7119e8d0ecedb77 (expected: 9df8b306d01f59d3a8029be411de015b7304dd8f)
+    init version: fec3683b971d9c3ef73f284f176672c44b448662 (expected: 949e6facb77383876aeff8a6944dde66b3089574)
+    Security Options:
+     seccomp
+      WARNING: You're not using the default seccomp profile
+      Profile: /etc/docker/seccomp.json
+    Kernel Version: 3.10.0-514.el7.x86_64
+    Operating System: CentOS Linux 7 (Core)
+    OSType: linux
+    Architecture: x86_64
+    Number of Docker Hooks: 3
+    CPUs: 1
+    Total Memory: 976.5 MiB
+    Name: localhost.localdomain
+    ID: 4FGM:MMD3:FGI2:HNXZ:EWZA:S6DC:NPXN:YY34:WBFV:5YM6:U2LS:6D55
+    Docker Root Dir: /var/lib/docker
+    Debug Mode (client): false
+    Debug Mode (server): false
+    Registry: https://index.docker.io/v1/
+    Experimental: false
+    Insecure Registries:
+     127.0.0.0/8
+    Live Restore Enabled: false
+    Registries: docker.io (secure)
+
+2.查看镜像
+    docker images [options] [repository]
+       [options]
+       -a ,--all=false # 查看全部镜像
+       -f,--filter=[] # 过滤
+       --no-trunc=false # 不截断，显示长id
+       -q,--quiet=false # 只显示id
+
+    [root@localhost docker-test]# docker images
+    REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
+    docker.io/nginx     latest              06144b287844        5 days ago          109 MB
+    docker.io/centos    latest              5182e96772bf        4 weeks ago         200 MB
+
+    [root@localhost docker-test]# docker images --no-trunc
+    REPOSITORY          TAG                 IMAGE ID                                                                  CREATED             SIZE
+    docker.io/nginx     latest              sha256:06144b2878448774e55577ae7d66b5f43a87c2e44322b3884e4e6c70d070b262   5 days ago          109 MB
+    docker.io/centos    latest              sha256:5182e96772bf11f4b912658e265dfe0db8bd314475443b6434ea708784192892   4 weeks ago         200 MB
+
+    [root@localhost docker-test]# docker images -q
+    06144b287844
+    5182e96772bf
+
+    # 将多个镜像构建成为列表展示
+    [root@localhost docker-test]# echo $(docker images -q)
+    06144b287844 5182e96772bf
+
+
+    registry仓库：存储仓库，registry仓库 中包含多个repository仓库。
+    repository仓库: 独立镜像。
+
+    完整镜像名 = repository仓库:tag标签  (默认tag为 latest)
+
+3.查看详细镜像信息
+    docker inspect [options] container[imags]
+        [options]
+        -f,--format=""
+
+    [root@localhost docker-test]# docker inspect 06144b287844
+    [
+        {
+            "Id": "sha256:06144b2878448774e55577ae7d66b5f43a87c2e44322b3884e4e6c70d070b262",
+            "RepoTags": [
+                "docker.io/nginx:latest"
+            ],
+            "RepoDigests": [
+                "docker.io/nginx@sha256:24a0c4b4a4c0eb97a1aabb8e29f18e917d05abfe1b7a7c07857230879ce7d3d3"
+            ],
+            "Parent": "",
+            "Comment": "",
+            "Created": "2018-09-05T00:57:00.322491744Z",
+            "Container": "ea0a37cdc91d1228880c77a4660fd74a6ba6ae5d2de6c54e2ac025c66c11f257",
+            "ContainerConfig": {
+                "Hostname": "ea0a37cdc91d",
+                "Domainname": "",
+                "User": "",
+                "AttachStdin": false,
+                "AttachStdout": false,
+                "AttachStderr": false,
+                "ExposedPorts": {
+                    "80/tcp": {}
+                },
+                "Tty": false,
+                "OpenStdin": false,
+                "StdinOnce": false,
+                "Env": [
+                    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                    "NGINX_VERSION=1.15.3-1~stretch",
+                    "NJS_VERSION=1.15.3.0.2.3-1~stretch"
+                ],
+                "Cmd": [
+                    "/bin/sh",
+                    "-c",
+                    "#(nop) ",
+                    "CMD [\"nginx\" \"-g\" \"daemon off;\"]"
+                ],
+                "ArgsEscaped": true,
+                "Image": "sha256:674565b18e1c8e0102c657d89059818ba8e0f476073f63078439951d4e0370b0",
+                "Volumes": null,
+                "WorkingDir": "",
+                "Entrypoint": null,
+                "OnBuild": [],
+                "Labels": {
+                    "maintainer": "NGINX Docker Maintainers <docker-maint@nginx.com>"
+                },
+                "StopSignal": "SIGTERM"
+            },
+            "DockerVersion": "17.06.2-ce",
+            "Author": "",
+            "Config": {
+                "Hostname": "",
+                "Domainname": "",
+                "User": "",
+                "AttachStdin": false,
+                "AttachStdout": false,
+                "AttachStderr": false,
+                "ExposedPorts": {
+                    "80/tcp": {}
+                },
+                "Tty": false,
+                "OpenStdin": false,
+                "StdinOnce": false,
+                "Env": [
+                    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                    "NGINX_VERSION=1.15.3-1~stretch",
+                    "NJS_VERSION=1.15.3.0.2.3-1~stretch"
+                ],
+                "Cmd": [
+                    "nginx",
+                    "-g",
+                    "daemon off;"
+                ],
+                "ArgsEscaped": true,
+                "Image": "sha256:674565b18e1c8e0102c657d89059818ba8e0f476073f63078439951d4e0370b0",
+                "Volumes": null,
+                "WorkingDir": "",
+                "Entrypoint": null,
+                "OnBuild": [],
+                "Labels": {
+                    "maintainer": "NGINX Docker Maintainers <docker-maint@nginx.com>"
+                },
+                "StopSignal": "SIGTERM"
+            },
+            "Architecture": "amd64",
+            "Os": "linux",
+            "Size": 109057266,
+            "VirtualSize": 109057266,
+            "GraphDriver": {
+                "Name": "overlay2",
+                "Data": {
+                    "LowerDir": "/var/lib/docker/overlay2/252ca010e34f6c21f6c6e24f6f605a8ce9157a048f16791d1522ae8ea2179f6d/diff:/var/lib/docker/overlay2/8ae5ad5f104c9a174ac7f5242fabe59f35b062b5f7102f904db51fe6031a43d5/diff",
+                    "MergedDir": "/var/lib/docker/overlay2/4c784da1fa586ac27c5306bfb195495a3c1bfddb5bdefd676f1d7df141eefac4/merged",
+                    "UpperDir": "/var/lib/docker/overlay2/4c784da1fa586ac27c5306bfb195495a3c1bfddb5bdefd676f1d7df141eefac4/diff",
+                    "WorkDir": "/var/lib/docker/overlay2/4c784da1fa586ac27c5306bfb195495a3c1bfddb5bdefd676f1d7df141eefac4/work"
+                }
+            },
+            "RootFS": {
+                "Type": "layers",
+                "Layers": [
+                    "sha256:8b15606a9e3e430cb7ba739fde2fbb3734a19f8a59a825ffa877f9be49059817",
+                    "sha256:67d3ae5dfa345eeae001eb9e2c814f77b180c80164ec79b2e47191871d2868d4",
+                    "sha256:579c75bb43c0e69e58113aab1185b274806188d8ed6ab4b69d2053921aec2553"
+                ]
+            }
+        }
+    ]
+
+    查看这在运行容器的pid
+    [root@localhost docker-test]# docker inspect --format "{{.State.Pid}}" mynginx2
+    44583
+
+4.删除镜像
+    # 当进行存在多个标签时，可直接删除指定标签，该镜像的其余标签仍旧存在
+    [root@localhost docker-test]# docker rmi ubuntu:14.01
+    untaged  ubuntu:14.01
+
+    # 基于仓库名 或 镜像创建容器id ，删除镜像，镜像将被彻底删除
+    [root@localhost docker-test]# docker rmi repository
+    [root@localhost docker-test]# docker rmi container
+
+    # 删除多个镜像
+    docker rmi ubuntu:14.01 ubuntu:12.01 ...
+
+    # 删除全部镜像 $(...) 动态构建集合
+    docker rmi $(docker images -q)
+
+5.查找镜像
+    http://registry.hub.docker.com
+
+    docker serach [options] TERM
+        [options]
+        --automated=false, 默认只显示自动构建的
+        --no-trunc=false 默认输出要截断
+        -s,--stars=0 按星数筛选，默认最多返回25
+
+
+    [root@localhost docker-test]# docker search ubuntu
+    INDEX       NAME                                                             DESCRIPTION                                     STARS     OFFICIAL   AUTOMATED
+    docker.io   docker.io/ubuntu                                                 Ubuntu is a Debian-based Linux operating s...   8359      [OK]
+    docker.io   docker.io/dorowu/ubuntu-desktop-lxde-vnc                         Ubuntu with openssh-server and NoVNC            218                  [OK]
+    docker.io   docker.io/rastasheep/ubuntu-sshd                                 Dockerized SSH service, built on top of of...   170                  [OK]
+    docker.io   docker.io/consol/ubuntu-xfce-vnc                                 Ubuntu container with "headless" VNC sessi...   129                  [OK]
+    docker.io   docker.io/ansible/ubuntu14.04-ansible                            Ubuntu 14.04 LTS with ansible                   95                   [OK]
+    ....
+
+    [root@localhost docker-test]# docker search --automated=true ubuntu
+    Flag --automated has been deprecated, use --filter=automated=true instead
+    INDEX       NAME                                                             DESCRIPTION                                     STARS     OFFICIAL   AUTOMATED
+    docker.io   docker.io/dorowu/ubuntu-desktop-lxde-vnc                         Ubuntu with openssh-server and NoVNC            218                  [OK]
+    docker.io   docker.io/rastasheep/ubuntu-sshd                                 Dockerized SSH service, built on top of of...   170                  [OK]
+    docker.io   docker.io/consol/ubuntu-xfce-vnc                                 Ubuntu container with "headless" VNC sessi...   129                  [OK]
+    docker.io   docker.io/ansible/ubuntu14.04-ansible                            Ubuntu 14.04 LTS with ansible                   95                   [OK]
+    ...
+
+    [root@localhost docker-test]# docker search --no-trunc=true ubuntu
+    INDEX       NAME                                                             DESCRIPTION                                                                                            STARS     OFFICIAL   AUTOMATED
+    docker.io   docker.io/ubuntu                                                 Ubuntu is a Debian-based Linux operating system based on free software.                                8359      [OK]
+    docker.io   docker.io/dorowu/ubuntu-desktop-lxde-vnc                         Ubuntu with openssh-server and NoVNC                                                                   218                  [OK]
+    docker.io   docker.io/rastasheep/ubuntu-sshd                                 Dockerized SSH service, built on top of official Ubuntu images.                                        170                  [OK]
+    ...
+
+    [root@localhost docker-test]# docker search -s 3 ubuntu
+    Flag --stars has been deprecated, use --filter=stars=3 instead
+    INDEX       NAME                                                             DESCRIPTION                                     STARS     OFFICIAL   AUTOMATED
+    docker.io   docker.io/ubuntu                                                 Ubuntu is a Debian-based Linux operating s...   8359      [OK]
+    docker.io   docker.io/dorowu/ubuntu-desktop-lxde-vnc                         Ubuntu with openssh-server and NoVNC            218                  [OK]
+    docker.io   docker.io/rastasheep/ubuntu-sshd                                 Dockerized SSH service, built on top of of...   170                  [OK]
+    ...
+
+6.配置加速器
+    https://www.daocloud.io/mirror#accelerator-doc
+    {
+      "registry-mirrors": ["http://d52d7f09.m.daocloud.io"],
+      "max-concurrent-downloads": 10
+    }
+
+
+    [root@localhost docker-test]# docker info
+    .....
+    Docker Root Dir: /var/lib/docker
+    Debug Mode (client): false
+    Debug Mode (server): false
+    Registry: https://index.docker.io/v1/
+    Experimental: false
+    Insecure Registries:
+     127.0.0.0/8
+    Registry Mirrors:
+     http://d52d7f09.m.daocloud.io  <<<
+    Live Restore Enabled: false
+    Registries: docker.io (secure)
+
+7.拉取镜像
+   # 将自己构建镜像推送到远程registry
+   docker push 镜像名
+
+
+8.commit构建镜像 (保存对镜像修改，提供自定义镜像能力，以软件形式分发服务及其运行环境)
+    docker commit [options] container [repository[:tag]] 通过容器构建镜像
+        [options]
+        -a,--author=""  作者
+        -m,--message="" 注释
+        -p,--pause=true 基于容器构建镜像默认会暂停容器，-p可保持容器继续运行
+
+    # 创建基于docker.io/centos 的容器nginx_01
+    [root@localhost docker-test]# docker run -it --name nginx_01 docker.io/centos  /bin/bash
+
+    # 成功进入容器，查看内核版本
+    [root@cc7e9cbc7300 /]# uname -a
+    Linux cc7e9cbc7300 3.10.0-514.el7.x86_64 #1 SMP Tue Nov 22 16:42:41 UTC 2016 x86_64 x86_64 x86_64 GNU/Linux
+
+    # 注册 Centos7 nginx的Yum源
+    [root@cc7e9cbc7300 /]#  rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm
+    Retrieving http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm
+    warning: /var/tmp/rpm-tmp.GAn2Ol: Header V4 RSA/SHA1 Signature, key ID 7bd9bf62: NOKEY
+    Preparing...                          ################################# [100%]
+    Updating / installing...
+       1:nginx-release-centos-7-0.el7.ngx ################################# [100%]
+
+    # 容器中基于yum 源安装nginx
+    [root@cc7e9cbc7300 /]# yum install -y nginx
+
+    # 查看nginx 帮助
+    root@7af388bba55d /]# nginx -h
+    nginx version: nginx/1.14.0
+    Usage: nginx [-?hvVtTq] [-s signal] [-c filename] [-p prefix] [-g directives]
+
+    Options:
+      -?,-h         : this help
+      -v            : show version and exit
+      -V            : show version and configure options then exit
+      -t            : test configuration and exit
+      -T            : test configuration, dump it and exit
+      -q            : suppress non-error messages during configuration testing
+      -s signal     : send signal to a master process: stop, quit, reopen, reload
+      -p prefix     : set prefix path (default: /etc/nginx/)
+      -c filename   : set configuration file (default: /etc/nginx/nginx.conf)
+      -g directives : set global directives out of configuration file
+
+    # 启动 ，重启 nginx -s reload, 停机 nginx -s stop
+    root@7af388bba55d /]# nginx
+    [root@7af388bba55d /]# ps -ef | grep nginx
+    root         26      1  0 06:26 ?        00:00:00 nginx: master process nginx
+    nginx        27     26  0 06:26 ?        00:00:00 nginx: worker process
+    root         29      1  0 06:26 ?        00:00:00 grep --color=auto nginx
+
+    # 查看 http://127.0.0.1:80
+
+    # 创建开机启动服务容器
+    -d 后台运行容器
+    -p 80:80 将主机的80端口映射到容器80端口
+    --name 容器名称
+    centos/nginx 镜像名称
+    nginx -g "daemon off;" 开机启动命令 必须以前台方式运行 nginx,否则运行完毕，容器会直接退出.";"不能省
+    docker run -d -p 80:80 -it --name nginx2 centos/nginx nginx -g "daemon off;"
+
+    # 查看 http://127.0.0.1:80
+
+    # 停止容器
+    [root@localhost docker-test]# docker stop nginx2
+
+    # 提交容器到本地仓库
+    [root@localhost docker-test]# docker commit nginx2
+    sha256:9936d75ebac93e51aab616b6f1d14a30dd117e9289dead65efe8a14305f6f6f7
+
+    # 查看提交，发现信息不全，将无法push到远程 whohow20094702/whohow20094702
+    [root@localhost docker-test]# docker images
+    REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
+    <none>              <none>              9936d75ebac9        7 minutes ago       297 MB
+    centos/nginx        latest              09f54b752a6d        About an hour ago   297 MB
+    docker.io/ubuntu    14.04               c32fae490809        4 days ago          188 MB
+
+    # docker tag image_id author/repository:tag  打标签
+    [root@localhost docker-test]# docker tag 9936d75ebac9 whohow20094702/centos-nginx:latest
+
+    [root@localhost docker-test]# docker images
+    REPOSITORY                    TAG                 IMAGE ID            CREATED             SIZE
+    whohow20094702/centos-nginx   latest              9936d75ebac9        9 minutes ago       297 MB  <<<
+    centos/nginx                  latest              09f54b752a6d        About an hour ago   297 MB
+    docker.io/ubuntu              14.04               c32fae490809        4 days ago          188 MB
+
+    # 推送到远程docker push image_nane/image_id
+    [root@localhost docker-test]# docker push whohow20094702/centos-nginx
+    The push refers to a repository [docker.io/whohow20094702/centos-nginx]  <<< 推送镜像名称
+    dafdaee800d6: Pushed
+    1d31b5806ba4: Pushed
+    latest: digest: sha256:8dfd64e88a216fd12bd7294f6993bf5da82bc25c115a4282e13c426281112363 size: 948
+
+    # 难以定位
+    [root@localhost docker-test]# docker search docker.io/whohow20094702/centos-nginx
+    ....
+
+    # 访问 https://hub.docker.com dashdoard 页，发现提交成功
+
+    # 拉取测试
+    # 先删除本地镜像
+    [root@localhost docker-test]# docker rmi 9936d75ebac9
+    Untagged: whohow20094702/centos-nginx:latest
+    Untagged: whohow20094702/centos-nginx@sha256:8dfd64e88a216fd12bd7294f6993bf5da82bc25c115a4282e13c426281112363
+    Deleted: sha256:9936d75ebac93e51aab616b6f1d14a30dd117e9289dead65efe8a14305f6f6f7
+    Deleted: sha256:a6e4d4890bce84da0cbf5e30e7498143facb4dd5ffdc54e78614a0e4599bc4ee
+
+    # 远程拉取
+    [root@localhost docker-test]# docker pull whohow20094702/centos-nginx
+    Using default tag: latest
+    Trying to pull repository docker.io/whohow20094702/centos-nginx ...
+    latest: Pulling from docker.io/whohow20094702/centos-nginx
+    256b176beaff: Already exists
+    8005ab2d8a00: Already exists
+    9364ceb0fea1: Pull complete
+    Digest: sha256:2079d9018894d3b1592a7d80f7ae17ac8479c5f42ff655b27f0a3d76a448f795  << 只拉取这一层
+    Status: Downloaded newer image for docker.io/whohow20094702/centos-nginx:latest
+
+    [root@localhost docker-test]# docker images
+    REPOSITORY                              TAG                 IMAGE ID            CREATED             SIZE
+    docker.io/whohow20094702/centos-nginx   latest              9936d75ebac9        21 minutes ago      297 MB
+    centos/nginx                            latest              09f54b752a6d        About an hour ago   297 MB
+    docker.io/ubuntu                        14.04               c32fae490809        4 days ago          188 MB
+
+
+9.dockerfile 构建镜像
+    命令
+   docker build [options] PATH | URL
+        [options]
+        --force-rm=false
+        --no-cache=false
+        -pull=false
+        -q.--quiet=false
+        --rm=true
+        -t,--tag=""
+
+    mkdir df && cd df
+    vim Dockerfile
+    ------------------------------------------------------------
+    # First Dockerfile
+    FROM docker.io/centos:latest # 基础镜像
+    MAINTAINER whohow20094702 "whohow20094702@163.com" # 维护者
+    RUN yum -y update    # 必须使用 -y 只更新系统软件
+    RUN rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm # 注册 nginx YUM源
+    RUN yum install -y nginx # 必须使用 -y
+    EXPOSE 80 # 暴露端口
+    ------------------------------------------------------------
+
+    # 首次构建（每步完成都生成了唯一ID）
+    [root@localhost df]# docker build --tag="whohow20094702/nginx_01" .
+    Sending build context to Docker daemon 2.048 kB
+    Step 1/6 : FROM docker.io/centos:latest   <<< 下载基础进行
+     ---> 5182e96772bf
+    Step 2/6 : MAINTAINER whohow20094702 "whohow20094702@163.com" <<< 定义 author
+     ---> Running in 64a57e4bb565
+     ---> 73ac5cd1df87
+    Removing intermediate container 64a57e4bb565
+    Step 3/6 : RUN yum -y update   <<< 更新系统应用
+     ---> Running in eca0941dfd01
+
+    Loaded plugins: fastestmirror, ovl
+    Determining fastest mirrors
+     * base: mirror.bit.edu.cn
+     * extras: mirror.bit.edu.cn
+     * updates: mirrors.huaweicloud.com
+    Resolving Dependencies
+    --> Running transaction check
+    ---> Package audit-libs.x86_64 0:2.8.1-3.el7 will be updated
+    ---> Package audit-libs.x86_64 0:2.8.1-3.el7_5.1 will be an update
+    ---> Package bind-license.noarch 32:9.9.4-61.el7 will be updated
+    ---> Package bind-license.noarch 32:9.9.4-61.el7_5.1 will be an update
+    ---> Package centos-release.x86_64 0:7-5.1804.1.el7.centos will be updated
+    ---> Package centos-release.x86_64 0:7-5.1804.4.el7.centos will be an update
+    ---> Package dracut.x86_64 0:033-535.el7 will be updated
+    ---> Package dracut.x86_64 0:033-535.el7_5.1 will be an update
+    ---> Package kpartx.x86_64 0:0.4.9-119.el7 will be updated
+    ---> Package kpartx.x86_64 0:0.4.9-119.el7_5.1 will be an update
+    ---> Package libblkid.x86_64 0:2.23.2-52.el7 will be updated
+    ---> Package libblkid.x86_64 0:2.23.2-52.el7_5.1 will be an update
+    ---> Package libmount.x86_64 0:2.23.2-52.el7 will be updated
+    ---> Package libmount.x86_64 0:2.23.2-52.el7_5.1 will be an update
+    ---> Package libuuid.x86_64 0:2.23.2-52.el7 will be updated
+    ---> Package libuuid.x86_64 0:2.23.2-52.el7_5.1 will be an update
+    ---> Package systemd.x86_64 0:219-57.el7 will be updated
+    ---> Package systemd.x86_64 0:219-57.el7_5.1 will be an update
+    ---> Package systemd-libs.x86_64 0:219-57.el7 will be updated
+    ---> Package systemd-libs.x86_64 0:219-57.el7_5.1 will be an update
+    ---> Package util-linux.x86_64 0:2.23.2-52.el7 will be updated
+    ---> Package util-linux.x86_64 0:2.23.2-52.el7_5.1 will be an update
+    --> Finished Dependency Resolution
+
+    Dependencies Resolved
+
+    ================================================================================
+     Package             Arch        Version                     Repository    Size
+    ================================================================================
+    Updating:
+     audit-libs          x86_64      2.8.1-3.el7_5.1             updates       99 k
+     bind-license        noarch      32:9.9.4-61.el7_5.1         updates       85 k
+     centos-release      x86_64      7-5.1804.4.el7.centos       updates       25 k
+     dracut              x86_64      033-535.el7_5.1             updates      325 k
+     kpartx              x86_64      0.4.9-119.el7_5.1           updates       76 k
+     libblkid            x86_64      2.23.2-52.el7_5.1           updates      178 k
+     libmount            x86_64      2.23.2-52.el7_5.1           updates      180 k
+     libuuid             x86_64      2.23.2-52.el7_5.1           updates       81 k
+     systemd             x86_64      219-57.el7_5.1              updates      5.0 M
+     systemd-libs        x86_64      219-57.el7_5.1              updates      402 k
+     util-linux          x86_64      2.23.2-52.el7_5.1           updates      2.0 M
+
+    Transaction Summary
+    ================================================================================
+    Upgrade  11 Packages
+
+    Total download size: 8.5 M
+    Downloading packages:
+    Delta RPMs disabled because /usr/bin/applydeltarpm not installed.
+    Public key for centos-release-7-5.1804.4.el7.centos.x86_64.rpm is not installed
+    warning: /var/cache/yum/x86_64/7/updates/packages/centos-release-7-5.1804.4.el7.centos.x86_64.rpm: Header V3 RSA/SHA256 Signature, key ID f4a80eb5: NOKEY
+    --------------------------------------------------------------------------------
+    Total                                              1.5 MB/s | 8.5 MB  00:05
+    Retrieving key from file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+    Importing GPG key 0xF4A80EB5:
+     Userid     : "CentOS-7 Key (CentOS 7 Official Signing Key) <security@centos.org>"
+     Fingerprint: 6341 ab27 53d7 8a78 a7c2 7bb1 24c6 a8a7 f4a8 0eb5
+     Package    : centos-release-7-5.1804.1.el7.centos.x86_64 (@Updates)
+     From       : /etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+    Running transaction check
+    Running transaction test
+    Transaction test succeeded
+    Running transaction
+      Updating   : libuuid-2.23.2-52.el7_5.1.x86_64                            1/22
+      Updating   : libblkid-2.23.2-52.el7_5.1.x86_64                           2/22
+      Updating   : libmount-2.23.2-52.el7_5.1.x86_64                           3/22
+      Updating   : audit-libs-2.8.1-3.el7_5.1.x86_64                           4/22
+      Updating   : systemd-libs-219-57.el7_5.1.x86_64                          5/22
+      Updating   : util-linux-2.23.2-52.el7_5.1.x86_64                         6/22
+      Updating   : centos-release-7-5.1804.4.el7.centos.x86_64                 7/22
+      Updating   : systemd-219-57.el7_5.1.x86_64                               8/22
+      Updating   : kpartx-0.4.9-119.el7_5.1.x86_64                             9/22
+      Updating   : dracut-033-535.el7_5.1.x86_64                              10/22
+      Updating   : 32:bind-license-9.9.4-61.el7_5.1.noarch                    11/22
+      Cleanup    : dracut-033-535.el7.x86_64                                  12/22
+      Cleanup    : 32:bind-license-9.9.4-61.el7.noarch                        13/22
+      Cleanup    : systemd-219-57.el7.x86_64                                  14/22
+      Cleanup    : util-linux-2.23.2-52.el7.x86_64                            15/22
+      Cleanup    : centos-release-7-5.1804.1.el7.centos.x86_64                16/22
+      Cleanup    : libmount-2.23.2-52.el7.x86_64                              17/22
+      Cleanup    : libblkid-2.23.2-52.el7.x86_64                              18/22
+      Cleanup    : libuuid-2.23.2-52.el7.x86_64                               19/22
+      Cleanup    : audit-libs-2.8.1-3.el7.x86_64                              20/22
+      Cleanup    : systemd-libs-219-57.el7.x86_64                             21/22
+      Cleanup    : kpartx-0.4.9-119.el7.x86_64                                22/22
+      Verifying  : kpartx-0.4.9-119.el7_5.1.x86_64                             1/22
+      Verifying  : dracut-033-535.el7_5.1.x86_64                               2/22
+      Verifying  : libmount-2.23.2-52.el7_5.1.x86_64                           3/22
+      Verifying  : centos-release-7-5.1804.4.el7.centos.x86_64                 4/22
+      Verifying  : systemd-219-57.el7_5.1.x86_64                               5/22
+      Verifying  : 32:bind-license-9.9.4-61.el7_5.1.noarch                     6/22
+      Verifying  : libuuid-2.23.2-52.el7_5.1.x86_64                            7/22
+      Verifying  : systemd-libs-219-57.el7_5.1.x86_64                          8/22
+      Verifying  : audit-libs-2.8.1-3.el7_5.1.x86_64                           9/22
+      Verifying  : libblkid-2.23.2-52.el7_5.1.x86_64                          10/22
+      Verifying  : util-linux-2.23.2-52.el7_5.1.x86_64                        11/22
+      Verifying  : libmount-2.23.2-52.el7.x86_64                              12/22
+      Verifying  : audit-libs-2.8.1-3.el7.x86_64                              13/22
+      Verifying  : libblkid-2.23.2-52.el7.x86_64                              14/22
+      Verifying  : kpartx-0.4.9-119.el7.x86_64                                15/22
+      Verifying  : dracut-033-535.el7.x86_64                                  16/22
+      Verifying  : util-linux-2.23.2-52.el7.x86_64                            17/22
+      Verifying  : systemd-219-57.el7.x86_64                                  18/22
+      Verifying  : 32:bind-license-9.9.4-61.el7.noarch                        19/22
+      Verifying  : systemd-libs-219-57.el7.x86_64                             20/22
+      Verifying  : centos-release-7-5.1804.1.el7.centos.x86_64                21/22
+      Verifying  : libuuid-2.23.2-52.el7.x86_64                               22/22
+
+    Updated:
+      audit-libs.x86_64 0:2.8.1-3.el7_5.1
+      bind-license.noarch 32:9.9.4-61.el7_5.1
+      centos-release.x86_64 0:7-5.1804.4.el7.centos
+      dracut.x86_64 0:033-535.el7_5.1
+      kpartx.x86_64 0:0.4.9-119.el7_5.1
+      libblkid.x86_64 0:2.23.2-52.el7_5.1
+      libmount.x86_64 0:2.23.2-52.el7_5.1
+      libuuid.x86_64 0:2.23.2-52.el7_5.1
+      systemd.x86_64 0:219-57.el7_5.1
+      systemd-libs.x86_64 0:219-57.el7_5.1
+      util-linux.x86_64 0:2.23.2-52.el7_5.1
+
+    Complete!
+     ---> 8c96d59bb0c1
+    Removing intermediate container eca0941dfd01
+    Step 4/6 : RUN rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm  <<< 注册nginx的YUM源
+     ---> Running in 6b30088ece93
+
+    warning: /var/tmp/rpm-tmp.p3vrxw: Header V4 RSA/SHA1 Signature, key ID 7bd9bf62: NOKEY
+    Retrieving http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm
+    Preparing...                          ########################################
+    Updating / installing...
+    nginx-release-centos-7-0.el7.ngx      ########################################
+     ---> 5a6c1ef3a1ff
+    Removing intermediate container 6b30088ece93
+    Step 5/6 : RUN yum install -y nginx   <<< 安装 nginx
+     ---> Running in 2fc73b48ffa0
+
+    Loaded plugins: fastestmirror, ovl
+    Loading mirror speeds from cached hostfile
+     * base: mirror.bit.edu.cn
+     * extras: mirror.bit.edu.cn
+     * updates: mirrors.huaweicloud.com
+    Resolving Dependencies
+    --> Running transaction check
+    ---> Package nginx.x86_64 1:1.14.0-1.el7_4.ngx will be installed
+    --> Processing Dependency: openssl >= 1.0.2 for package: 1:nginx-1.14.0-1.el7_4.ngx.x86_64
+    --> Running transaction check
+    ---> Package openssl.x86_64 1:1.0.2k-12.el7 will be installed
+    --> Processing Dependency: make for package: 1:openssl-1.0.2k-12.el7.x86_64
+    --> Running transaction check
+    ---> Package make.x86_64 1:3.82-23.el7 will be installed
+    --> Finished Dependency Resolution
+
+    Dependencies Resolved
+
+    ================================================================================
+     Package        Arch          Version                        Repository    Size
+    ================================================================================
+    Installing:
+     nginx          x86_64        1:1.14.0-1.el7_4.ngx           nginx        750 k
+    Installing for dependencies:
+     make           x86_64        1:3.82-23.el7                  base         420 k
+     openssl        x86_64        1:1.0.2k-12.el7                base         492 k
+
+    Transaction Summary
+    ================================================================================
+    Install  1 Package (+2 Dependent packages)
+
+    Total download size: 1.6 M
+    Installed size: 4.5 M
+    Downloading packages:
+    --------------------------------------------------------------------------------
+    Total                                              618 kB/s | 1.6 MB  00:02
+    Running transaction check
+    Running transaction test
+    Transaction test succeeded
+    Running transaction
+    Warning: RPMDB altered outside of yum.
+      Installing : 1:make-3.82-23.el7.x86_64                                    1/3
+      Installing : 1:openssl-1.0.2k-12.el7.x86_64                               2/3
+      Installing : 1:nginx-1.14.0-1.el7_4.ngx.x86_64                            3/3
+    ----------------------------------------------------------------------
+
+    Thanks for using nginx!
+
+    Please find the official documentation for nginx here:
+    * http://nginx.org/en/docs/
+
+    Please subscribe to nginx-announce mailing list to get
+    the most important news about nginx:
+    * http://nginx.org/en/support.html
+
+    Commercial subscriptions for nginx are available on:
+    * http://nginx.com/products/
+
+    ----------------------------------------------------------------------
+      Verifying  : 1:openssl-1.0.2k-12.el7.x86_64                               1/3
+      Verifying  : 1:make-3.82-23.el7.x86_64                                    2/3
+      Verifying  : 1:nginx-1.14.0-1.el7_4.ngx.x86_64                            3/3
+
+    Installed:
+      nginx.x86_64 1:1.14.0-1.el7_4.ngx
+
+    Dependency Installed:
+      make.x86_64 1:3.82-23.el7            openssl.x86_64 1:1.0.2k-12.el7
+
+    Complete!
+     ---> 6bcbc7e27464
+    Removing intermediate container 2fc73b48ffa0
+    Step 6/6 : EXPOSE 80    <<< 暴露 80 端口
+     ---> Running in 87d50c94968a
+     ---> 8374d6650b07
+    Removing intermediate container 87d50c94968a
+    Successfully built 8374d6650b07
+
+    # 构建完毕自动将镜像载入本地仓库
+    [root@localhost df]# docker images
+    REPOSITORY                              TAG                 IMAGE ID            CREATED             SIZE
+    whohow20094702/nginx_01                 latest              8374d6650b07        16 seconds ago      377 MB
+    docker.io/whohow20094702/centos-nginx   latest              9
+    936d75ebac9        About an hour ago   297 MB
+    centos/nginx                            latest              09f54b752a6d        2 hours ago         297 MB
+
+    # 测试基于Dockerfile 构建镜像创建容器 (强制 80端口映射)
+    [root@localhost df]# docker run -d -it -p 80:80 --name nginx3 whohow20094702/nginx_01 nginx -g "daemon off;"
+    [root@localhost df]# docker ps
+    CONTAINER ID        IMAGE                     COMMAND                  CREATED             STATUS              PORTS                   NAMES
+    0805b33fd2f2        whohow20094702/nginx_01   "nginx -g 'daemon ..."   4 seconds ago       Up 3 seconds        0.0.0.0:80->80/tcp   nginx3
+
+    # 随机端口映射
+    [root@localhost df]# docker run -d -it -p 80 --name nginx3 whohow20094702/nginx_01 nginx -g "daemon off;"
+    [root@localhost df]# docker ps
+    CONTAINER ID        IMAGE                     COMMAND                  CREATED             STATUS              PORTS                   NAMES
+    0805b33fd2f2        whohow20094702/nginx_01   "nginx -g 'daemon ..."   4 seconds ago       Up 3 seconds        0.0.0.0:32769->80/tcp   nginx3
+
+    # 浏览器检测
+    curl http://127.0.0.1:80
+
+
+
+
+

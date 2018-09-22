@@ -1,0 +1,543 @@
+1.Docker网卡
+    [root@localhost df]# ifconfig
+    docker0: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500   <<<< Docker 应用程序在宿主机上注册的虚拟网卡，启动任何容器，都会基于此网卡，创建网络连接接口
+            inet 172.17.0.1  netmask 255.255.0.0  broadcast 0.0.0.0
+            inet6 fe80::42:cff:feaf:75ab  prefixlen 64  scopeid 0x20<link>
+            ether 02:42:0c:af:75:ab  txqueuelen 0  (Ethernet)
+            RX packets 64474  bytes 2665018 (2.5 MiB)
+            RX errors 0  dropped 0  overruns 0  frame 0
+            TX packets 103789  bytes 231211127 (220.5 MiB)
+            TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+    ens33: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500  <<< 宿主机真实网卡
+            inet 172.16.32.100  netmask 255.255.255.0  broadcast 172.16.32.255
+            inet6 fe80::20c:29ff:fe5f:b2c8  prefixlen 64  scopeid 0x20<link>
+            ether 00:0c:29:5f:b2:c8  txqueuelen 1000  (Ethernet)
+            RX packets 891146  bytes 1276588709 (1.1 GiB)
+            RX errors 0  dropped 0  overruns 0  frame 0
+            TX packets 270507  bytes 17862481 (17.0 MiB)
+            TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+    ....
+    vethc4c00f1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500    <<<< docker 容器运行时，docker守护进程会在docker0网卡注册 vethxxx 的网络接口，对容器提供网络连接服务
+            inet6 fe80::7834:43ff:fe42:d183  prefixlen 64  scopeid 0x20<link>
+            ether 7a:34:43:42:d1:83  txqueuelen 0  (Ethernet)
+            RX packets 6  bytes 508 (508.0 B)
+            RX errors 0  dropped 0  overruns 0  frame 0
+            TX packets 6  bytes 508 (508.0 B)
+            TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+
+
+    OSI 七层网络模型
+    应用层     APP
+    表示层
+    会话层     HTTP
+    传输层     TCP
+    网络层     IP
+    数据链路层 <<< 网桥层，基于mac 地址划分网络
+    物理层    <<< 光纤，双绞线
+    Linux 虚拟网桥 可设置IP 地址，相当于用于一个隐藏的虚拟网卡。
+
+    docker0 地址划分
+    ip: 172.17.41.1 子网掩码：255.255.0.0 MAC 地址 02:42:ac:11:00:00 ~ 02:42:ac:11:ff:ff 总共 65534个地址。
+
+    docker 容器启动时，后台守护进程 一方面在Container 容器中创建了eth0 虚拟网卡，一方面在宿主机的 docker0 网卡中注册了 veth* 的网络接口，从而实现容器与网络的链接。
+
+2.查看docker网络接口
+    [root@localhost df]# brctl show   （yum install -y bridge-util）
+    bridge name     bridge id               STP enabled     interfaces
+    docker0 《《     8000.02420caf75ab       no              vethc4c00f1  《《《
+    virbr0          8000.5254004b6bc6       yes             virbr0-nic
+
+3.自定义docker 网段
+    方案1：ifconfig命令动态配置 docker0 网卡的 ip,重启docker守护进程，然后启动运行容器，查看ip
+        # 修改docker0网卡绑定的ip 和 掩码
+        root@localhost df]# ifconfig docker0 192.168.200.1 netmask 255.255.255.0
+
+        [root@localhost df]# ifconfig
+        docker0: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+                inet 192.168.200.1  netmask 255.255.255.0  broadcast 192.168.200.255
+                inet6 fe80::42:cff:feaf:75ab  prefixlen 64  scopeid 0x20<link>
+                ether 02:42:0c:af:75:ab  txqueuelen 0  (Ethernet)
+                RX packets 64498  bytes 2666626 (2.5 MiB)
+                RX errors 0  dropped 0  overruns 0  frame 0
+                TX packets 103789  bytes 231211127 (220.5 MiB)
+                TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        ...
+
+        # 重启 docker 守护进程
+        [root@localhost df]# service docker restart
+
+        # 再次查看 docker0 网卡绑定额ip ，发现仍旧为默认ip （修改测试失败）
+        [root@localhost df]# ifconfig
+        docker0: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+                inet 172.17.0.1  netmask 255.255.255.0  broadcast 192.168.200.255
+                inet6 fe80::42:cff:feaf:75ab  prefixlen 64  scopeid 0x20<link>
+                ether 02:42:0c:af:75:ab  txqueuelen 0  (Ethernet)
+                RX packets 64498  bytes 2666626 (2.5 MiB)
+                RX errors 0  dropped 0  overruns 0  frame 0
+                TX packets 103789  bytes 231211127 (220.5 MiB)
+                TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        ...
+
+        （补）直接编辑 docker守护进程启动配置危机 /etc/docker/daemon.json, 覆盖默认绑定 ip
+            [root@localhost df]# vim /etc/docker/daemon.json
+            {
+              "registry-mirrors": ["http://d52d7f09.m.daocloud.io"],
+              "max-concurrent-downloads": 10,
+              "bip": "192.168.200.1/24"  # <<<< 必须带上 /24 端口
+            }
+
+        # 重启守护进程
+        [root@localhost df]# service docker restart
+
+        # 查看
+        [root@localhost df]# ifconfig
+        docker0: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+                inet 192.168.200.1  netmask 255.255.255.0  broadcast 192.168.200.255
+                inet6 fe80::42:cff:feaf:75ab  prefixlen 64  scopeid 0x20<link>
+                ether 02:42:0c:af:75:ab  txqueuelen 0  (Ethernet)
+                RX packets 64498  bytes 2666626 (2.5 MiB)
+                RX errors 0  dropped 0  overruns 0  frame 0
+                TX packets 103789  bytes 231211127 (220.5 MiB)
+                TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        ...
+
+        # 启动一个容器
+        [root@localhost df]# docker run -it docker.io/centos /bin/bash
+
+
+        root@8f4476fdb039 /]# [root@localhost df]# docker ps
+        CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+        8f4476fdb039        docker.io/centos    "/bin/bash"         26 seconds ago      Up 24 seconds                           laughing_varahamihira
+
+        # 查看容器绑定ip
+        [root@localhost df]# docker inspect 8f4476fdb039 | grep IP
+                    "LinkLocalIPv6Address": "",
+                    "LinkLocalIPv6PrefixLen": 0,
+                    "SecondaryIPAddresses": null,
+                    "SecondaryIPv6Addresses": null,
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "IPAddress": "192.168.200.2",
+                    "IPPrefixLen": 24,
+                    "IPv6Gateway": "",
+                            "IPAMConfig": null,
+                            "IPAddress": "192.168.200.2",   <<<<
+                            "IPPrefixLen": 24,
+                            "IPv6Gateway": "",
+                            "GlobalIPv6Address": "",
+                            "GlobalIPv6PrefixLen": 0,
+
+        注:docker0恢复默认ip,并非直接删除 /etc/docker/daemon.jso 中的 "bip": "xxx.xxx.xxx.xxx/24" 就可以了，需要显示写回 "bip": "172.17.0.1/24",重启，，然后删除 "bip": "172.17.0.1/24"。
+
+    方案2：创建行网卡 br0 ,docker守护进程启动时挂载到br0
+        # 创建新网卡 br0
+        brctl addbr br0
+
+        # 注册 br0, 注此处必须指定24端口
+        ifconfig br0 192.168.201.1/24 netmask 255.255.255.0
+
+        ifconfig
+        br0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+                inet 192.168.201.1  netmask 255.255.255.0  broadcast 0.0.0.0   <<<< 注册成功
+                inet6 fe80::3cf8:d2ff:fe26:fec9  prefixlen 64  scopeid 0x20<link>
+                ether 96:d9:ae:99:ac:e8  txqueuelen 1000  (Ethernet)
+                RX packets 24  bytes 1608 (1.5 KiB)
+                RX errors 0  dropped 0  overruns 0  frame 0
+                TX packets 37  bytes 6500 (6.3 KiB)
+                TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+        # 修改默认启动配置文件
+        vim /etc/sysconfig/docker
+        ----------------------------------------
+        ...
+        OPTIONS='--selinux-enabled=false --log-driver=journald --signature-verification=false'
+        OPTIONS='-b=br0 --label name=test_options1 -H tcp://0.0.0.0:2375 -H unix:///var/run/docker.sock'
+        ...      ^^^^^^
+        ----------------------------------------
+
+        # 重启docker守护进程
+        service docker restart
+
+        # 运行容器
+        docker run -itd --name ip2 docker.io/centos
+
+        # 查看容器绑定 ip，验证 -p=br0 是否生效
+        docker inspect --format "{{.NetworkSettings.IPAddress}}" ip2
+        192.168.201.2
+
+        注：当 /etc/docker/daemon.json 中配置的 "bip": "xxx.xxx.xxx.xxx" 和 /etc/sysconfig/docker 中配置的 -b=br0 同时存在时
+        docker 守护进程启动会报异常
+
+        journalctl -xe
+        .....
+        Sep 11 01:55:34 localhost.localdomain dockerd-current[25882]: Error starting daemon: You specified -b & --bip, mutually exclusive options. Please specify only one
+        .....                                                                                             ^^^^    ^^^^                              ^^^^^^^^^^ 只能二选一
+
+        # 网卡关闭
+        ifconfig br0 down
+
+        # 网卡删除
+        brctl delbr br0
+
+
+4.默认容器天然互联
+    vim /etc/docker/daemon.json （将加速器更新到 aliyun）
+    ------------------------------------------------
+    {
+      "registry-mirrors": ["https://phwu2j1l.mirror.aliyuncs.com"],
+      "max-concurrent-downloads": 10
+    }
+    ------------------------------------------------
+
+    1) 容器默认相互联通
+    docker run 默认选项 -icc=true 即基于相同docker0网卡创建的容器网络接口，默认全部联通
+
+    vim Dockerfile
+    ------------------------------
+    # Test net
+    FROM ubuntu:14.04
+    RUN apt-get install -y ping
+    RUN apt-get update
+    RUN apt-get install -y nginx
+    RUN apt-get install -y curl
+    EXPOSE 80
+    CMD /bin/bash
+    ------------------------------
+
+    cd ubuntu-nginx
+
+    docker build --tag="whohow20094702/test-net" ./
+
+    docker images
+    REPOSITORY                TAG                 IMAGE ID            CREATED             SIZE
+    whohow20094702/test-net   latest              20bd39a70807        14 hours ago        242 MB  <<<
+    whohow20094702/copy4      latest              0589c899f587        19 hours ago        334 MB
+    whohow20094702/copy3      latest              a2c0f66a1f84        19 hours ago        334 MB
+
+    docker run -itd --name net1 whohow20094702/test-net /bin/bash
+    docker run -itd --name net2 whohow20094702/test-net /bin/bash
+
+    docker inspect net1 | grep IPAddress
+    172.17.0.2"
+
+    docker inspect net2 | grep IPAddress
+    172.17.0.3"
+
+    # docker0 网卡绑定ip为 172.17.0.1
+
+    docker attach net1
+    root@fbc7cf977579:/# ping 172.17.0.3
+    PING 172.17.0.3 (172.17.0.3) 56(84) bytes of data.
+    64 bytes from 172.17.0.3: icmp_seq=1 ttl=64 time=0.110 ms
+    64 bytes from 172.17.0.3: icmp_seq=2 ttl=64 time=0.134 ms
+
+    docker attach net2
+    root@fbc7cf977579:/# ping 172.17.0.2
+    PING 172.17.0.3 (172.17.0.3) 56(84) bytes of data.
+    64 bytes from 172.17.0.3: icmp_seq=1 ttl=64 time=0.110 ms
+    64 bytes from 172.17.0.3: icmp_seq=2 ttl=64 time=0.134 ms
+
+5.容器重启，IP地址漂移，需通过别名固定连接（被连接容器的ip变化时，hosts中ip与主机名映射关系也动态调整）
+    docker run -itd --name net0 whohow20094702/test-net
+    docker run -itd --name net1 --link=net0:webtest0  whohow20094702/test-net
+    docker run -itd --name net2 whohow20094702/test-net
+
+    docker inspect --format "{{.NetworkSettings.IPAddress}}" net0 net1 net2
+    172.17.0.2
+    172.17.0.3
+    172.17.0.4
+
+    dcoker attach net1
+    root@2d9d94dbb7c5:/# ping net0
+    PING 172.17.0.2 (172.17.0.2) 56(84) bytes of data.
+    64 bytes from 172.17.0.2: icmp_seq=1 ttl=64 time=0.110 ms
+    64 bytes from 172.17.0.2: icmp_seq=2 ttl=64 time=0.134 ms
+    ...
+
+    root@2d9d94dbb7c5:/# ping webtest0
+    PING 172.17.0.2 (172.17.0.2) 56(84) bytes of data.
+    64 bytes from 172.17.0.2: icmp_seq=1 ttl=64 time=0.110 ms
+    64 bytes from 172.17.0.2: icmp_seq=2 ttl=64 time=0.134 ms
+    ...
+
+    root@2d9d94dbb7c5:/# cat /etc/hosts
+    127.0.0.1       localhost
+    ::1     localhost ip6-localhost ip6-loopback
+    fe00::0 ip6-localnet
+    ff00::0 ip6-mcastprefix
+    ff02::1 ip6-allnodes
+    ff02::2 ip6-allrouters
+    172.17.0.2      webtest0 cca72d987043 net0   <<< net1的hosts中注册了net0的别名 与 ip 映射关系
+    172.17.0.4      2d9d94dbb7c5
+
+    docker stop net0 net1 net2
+
+    docker start net2 net0 net1  # <<<< 存在--link 依赖的容器，必须按序启动
+
+    docker inspect --format "{{.NetworkSettings.IPAddress}}" net0 net1 net2   # << 启动顺序改变，ip 也发送变化
+    172.17.0.3
+    172.17.0.4
+    172.17.0.2
+
+    docker attach net1
+
+    root@2d9d94dbb7c5:/# ping net0
+    PING 172.17.0.3 (172.17.0.3) 56(84) bytes of data.
+    64 bytes from 172.17.0.3: icmp_seq=1 ttl=64 time=0.110 ms
+    64 bytes from 172.17.0.3: icmp_seq=2 ttl=64 time=0.134 ms
+    ...
+
+    root@2d9d94dbb7c5:/# ping webtest0
+    PING 172.17.0.3 (172.17.0.3) 56(84) bytes of data.
+    64 bytes from 172.17.0.3: icmp_seq=1 ttl=64 time=0.110 ms
+    64 bytes from 172.17.0.3: icmp_seq=2 ttl=64 time=0.134 ms
+    ...
+
+    root@2d9d94dbb7c5:/# cat /etc/hosts
+    127.0.0.1       localhost
+    ::1     localhost ip6-localhost ip6-loopback
+    fe00::0 ip6-localnet
+    ff00::0 ip6-mcastprefix
+    ff02::1 ip6-allnodes
+    ff02::2 ip6-allrouters
+    172.17.0.3      webtest0 cca72d987043 net0   <<< net0 的别名和ip映射关系，随net0的ip变化，也动态变化了
+    172.17.0.4      2d9d94dbb7c5
+
+    # 查看环境变量
+    root@2d9d94dbb7c5:/# env
+    HOSTNAME=2d9d94dbb7c5
+    TERM=xterm
+    WEBTEST0_PORT_80_TCP_PROTO=tcp
+    LS_COLORS=rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arj=01;31:*.taz=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.zip=01;31:*.z=01;31:*.Z=01;31:*.dz=01;31:*.gz=01;31:*.lz=01;31:*.xz=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.jpg=01;35:*.jpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.axv=01;35:*.anx=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.axa=00;36:*.oga=00;36:*.spx=00;36:*.xspf=00;36:
+    WEBTEST0_PORT_80_TCP=tcp://172.17.0.2:80   <<< 出现很多以webtest 命名环境变量
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    PWD=/
+    WEBTEST0_PORT_80_TCP_PORT=80
+    WEBTEST0_NAME=/net1/webtest0
+    WEBTEST0_PORT=tcp://172.17.0.2:80
+    SHLVL=1
+    HOME=/root
+    WEBTEST0_PORT_80_TCP_ADDR=172.17.0.2
+    LESSOPEN=| /usr/bin/lesspipe %s
+    LESSCLOSE=/usr/bin/lesspipe %s %s
+    _=/usr/bin/env
+
+
+6.在默认容器自联前提下，容器间互访无端口限制
+    docker restart net0 net1 net2
+
+    docker attach net0
+    root@2d9d94dbb7c5:/# nginx
+    root@2d9d94dbb7c5:/# ps -ef | grep nginx
+    root         19      1  0 00:35 ?        00:00:00 nginx: master process nginx
+    www-data     20     19  0 00:35 ?        00:00:00 nginx: worker process
+    www-data     21     19  0 00:35 ?        00:00:00 nginx: worker process
+    www-data     22     19  0 00:35 ?        00:00:00 nginx: worker process
+    www-data     23     19  0 00:35 ?        00:00:00 nginx: worker process
+    root         25      5  0 00:35 ?        00:00:00 grep --color=auto nginx
+
+    docker attach net1
+    root@c059dbb84f61:/# nginx
+    root@c059dbb84f61:/#  ps -ef | grep nginx
+    root         19      1  0 00:35 ?        00:00:00 nginx: master process nginx
+    www-data     20     19  0 00:35 ?        00:00:00 nginx: worker process
+    www-data     21     19  0 00:35 ?        00:00:00 nginx: worker process
+    www-data     22     19  0 00:35 ?        00:00:00 nginx: worker process
+    www-data     23     19  0 00:35 ?        00:00:00 nginx: worker process
+    root         25      5  0 00:35 ?        00:00:00 grep --color=auto nginx
+
+    # ip互联，端口无限制
+    root@c059dbb84f61:/# curl wettest0
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <title>Welcome to nginx!</title>
+    ....
+
+
+7.宿主机可自由基于容器IP地址访问docker服务(默认容器端口对宿主机全部开放)
+    docker restart net0
+
+    docker attach net0
+    root@2d9d94dbb7c5:/# nginx
+    root@2d9d94dbb7c5:/# ps -ef | grep nginx
+    root         19      1  0 00:35 ?        00:00:00 nginx: master process nginx
+    www-data     20     19  0 00:35 ?        00:00:00 nginx: worker process
+    www-data     21     19  0 00:35 ?        00:00:00 nginx: worker process
+    www-data     22     19  0 00:35 ?        00:00:00 nginx: worker process
+    www-data     23     19  0 00:35 ?        00:00:00 nginx: worker process
+    root         25      5  0 00:35 ?        00:00:00 grep --color=auto nginx
+
+    curl 172.17.0.1
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <title>Welcome to nginx!</title>
+    ....
+
+8.外部机器基于宿主机访问docker服务，需要借助 -p 80:80 端口映射规则
+    docker run -itd --name ngx1 centos/nginx nginx -g "daemon off;"
+    bcbe6b17cfafa1445749982bd626b925d783704323d0f7156011a68c1a265822
+
+    [root@localhost ubuntu-nginx]# docker ps
+    CONTAINER ID        IMAGE                     COMMAND                  CREATED             STATUS              PORTS               NAMES
+    bcbe6b17cfaf        centos/nginx              "nginx -g 'daemon ..."   3 seconds ago       Up 2 seconds                            ngx1
+    ...
+
+    curl http://127.0.0.1:80/
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <title>Welcome to nginx!</title>
+    ....
+
+    外部浏览器 访问 http://docker-01:80/
+
+9.阻止容器间默认连接
+    vim /etc/sysconfig/docker
+    ------------------------------------------------
+    ....
+    OPTIONS='--selinux-enabled=false --log-driver=journald --signature-verification=false'
+    OPTIONS='--icc=false --label name=test_options1 -H tcp://0.0.0.0:2375 -H unix:///var/run/docker.sock'  # <<<< --icc=false 阻止容器间默认联通状态，
+    ....
+    ------------------------------------------------
+
+    service docker restart
+
+    docker start net0 net1 net2
+
+    docker atach net0
+    ping 172.17.0.3  # 不通
+    ping 172.17.0.4  # 不通
+
+    docker attach net1
+    ping 172.17.0.1  # 即便使用 --link 连接，也是不通
+    ping 172.17.0.4
+
+
+10.通过iptables动态配置端口映射
+    # 安装 iptables 模块
+    yum install -y iptables-service
+
+    # 运行开机启动
+    systemctl enable iptables
+
+    # 启动 iptabes
+    systemctl iptales start
+
+    # 查看现有iptables （未发现docker0注册痕迹）
+    iptables -t nat -nvL
+    Chain PREROUTING (policy ACCEPT 0 packets, 0 bytes)
+    num   pkts bytes target     prot opt in     out     source               destination
+
+    Chain INPUT (policy ACCEPT 0 packets, 0 bytes)
+    num   pkts bytes target     prot opt in     out     source               destination
+
+    Chain OUTPUT (policy ACCEPT 5 packets, 364 bytes)
+    num   pkts bytes target     prot opt in     out     source               destination
+
+    Chain POSTROUTING (policy ACCEPT 5 packets, 364 bytes)
+    num   pkts bytes target     prot opt in     out     source               destination
+
+    # 重启 docker 守护进程
+    service docker restart
+
+    # 保存iptables
+    iptables-save
+
+    # 再次查看iptables,发现docker0 成功注册
+    iptables -t nat -nvL
+    Chain PREROUTING (policy ACCEPT 0 packets, 0 bytes)
+     pkts bytes target     prot opt in     out     source               destination
+        0     0 DOCKER     all  --  *      *       0.0.0.0/0            0.0.0.0/0            ADDRTYPE match dst-type LOCAL
+
+    Chain INPUT (policy ACCEPT 0 packets, 0 bytes)
+     pkts bytes target     prot opt in     out     source               destination
+
+    Chain OUTPUT (policy ACCEPT 0 packets, 0 bytes)
+     pkts bytes target     prot opt in     out     source               destination
+        0     0 DOCKER     all  --  *      *       0.0.0.0/0           !127.0.0.0/8          ADDRTYPE match dst-type LOCAL
+
+    Chain POSTROUTING (policy ACCEPT 0 packets, 0 bytes)
+     pkts bytes target     prot opt in     out     source               destination
+        0     0 MASQUERADE  all  --  *      !docker0  172.17.0.0/24        0.0.0.0/0
+
+    Chain DOCKER (2 references)
+     pkts bytes target     prot opt in     out     source               destination
+        0     0 RETURN     all  --  docker0 *       0.0.0.0/0            0.0.0.0/0
+
+    # 启动docker 容器，并前台启动nginx服务（未配置端口映射）
+    docker run -itd --name net0 whohow20094702/test-net nginx -g "daemon off;"
+
+    docker ps
+    CONTAINER ID        IMAGE                     COMMAND                  CREATED             STATUS              PORTS               NAMES
+    9aa933ceb6d0        whohow20094702/test-net   "nginx -g 'daemon ..."   45 minutes ago      Up 30 minutes       80/tcp              net0
+
+    # 添加端口映射 将宿主机 172.17.32.100:80 映射到 172.17.0.2:80
+    iptables -t nat -A DOCKER -p tcp --dport 80 -j DNAT --to-destination 172.17.0.2:80
+
+    curl http://172.16.32:80/  ok
+    curl http://127.0.0.1:80/  fail
+
+    iptables 原理：
+
+    PREROUTING          POSTROUTING
+        |                   ↑
+        ↓    -> FORWARD ->  |
+      INPUT       ->      OUTPUT
+
+    1）通过外网ip进入的信号，经检查发现是发送给本机的，进入 INPUT ,如果是要转发给其他主机的，进入FORWARD 并经过 POSTROUTING 发出;
+    2) 本机需要发送出去的，进入OUTPUT,经POSTROUTING 发送出去。
+
+10.Docker守护进行启动脚本
+    Centos7 所有服务全部兼容老版本启动方式 service docker start,同时推荐使用新启动方式  systemctl start docker.service
+    全部启动脚本在 6.x 系统中存在于 /etc/init.d 中，在7.x中，挪到了 /usr/lib/systemd/system/docker.service
+    cat /usr/lib/systemd/system/docker.service
+    ---------------------------------------------------------------------------------------------------
+    [Unit]
+    Description=Docker Application Container Engine
+    Documentation=http://docs.docker.com
+    After=network.target rhel-push-plugin.socket registries.service
+    Wants=docker-storage-setup.service
+    Requires=docker-cleanup.timer
+
+    [Service]
+    Type=notify
+    NotifyAccess=main
+    EnvironmentFile=-/run/containers/registries.conf
+    EnvironmentFile=-/etc/sysconfig/docker
+    EnvironmentFile=-/etc/sysconfig/docker-storage
+    EnvironmentFile=-/etc/sysconfig/docker-network
+    Environment=GOTRACEBACK=crash
+    Environment=DOCKER_HTTP_HOST_COMPAT=1
+    Environment=PATH=/usr/libexec/docker:/usr/bin:/usr/sbin
+    ExecStart=/usr/bin/dockerd-current \
+              --add-runtime docker-runc=/usr/libexec/docker/docker-runc-current \
+              --default-runtime=docker-runc \
+              --exec-opt native.cgroupdriver=systemd \
+              --userland-proxy-path=/usr/libexec/docker/docker-proxy-current \
+              --init-path=/usr/libexec/docker/docker-init-current \
+              --seccomp-profile=/etc/docker/seccomp.json \
+              $OPTIONS \
+              $DOCKER_STORAGE_OPTIONS \
+              $DOCKER_NETWORK_OPTIONS \
+              $ADD_REGISTRY \
+              $BLOCK_REGISTRY \
+              $INSECURE_REGISTRY \
+              $REGISTRIES
+    ExecReload=/bin/kill -s HUP $MAINPID
+    LimitNOFILE=1048576
+    LimitNPROC=1048576
+    LimitCORE=infinity
+    TimeoutStartSec=0
+    Restart=on-abnormal
+    KillMode=process
+
+    [Install]
+    WantedBy=multi-user.target
+
+    ---------------------------------------------------------------------------------------------------
+
+

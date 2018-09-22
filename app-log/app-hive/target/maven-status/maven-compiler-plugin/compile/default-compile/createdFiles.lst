@@ -1,0 +1,5 @@
+com/big/data/app/hive/WeekBeginUDF.class
+com/big/data/app/hive/DateUtil.class
+com/big/data/app/hive/MonthBeginUDF.class
+com/big/data/app/hive/DayBeginUDF.class
+com/big/data/app/hive/FormatTimeUDF.class

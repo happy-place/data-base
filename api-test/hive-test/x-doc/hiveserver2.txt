@@ -1,0 +1,86 @@
+hiveserver2 配置
+vim conf/hive-site.xml
+<!-- 显示表头-->
+<property>
+      <name>hive.cli.print.header</name>
+      <value>true</value>
+</property>
+
+<!-- 显示库名 -->
+<property>
+      <name>hive.cli.print.current.db</name>
+      <value>true</value>
+</property>
+ 
+<!-- hive远程访问代理服务uri集合-->
+<property>
+      <name>hive.metastore.uris</name>
+      <value>thrift://localhost:9083</value>
+</property>
+ 
+<!-- hive远程访问代理服务绑定端口 -->
+<property>
+      <name>hive.server2.thrift.port</name>
+      <value>10000</value>
+</property>
+ 
+<!-- hive远程访问代理服务绑定主机 -->
+<property>
+    <name>hive.server2.thrift.bind.host</name>
+    <value>localhost</value>
+</property>
+ 
+<!-- hive远程访问代理服务超时-->
+<property>
+    <name>hive.server2.long.polling.timeout</name>
+    <value>5000</value>
+</property>
+
+启动源数据存储访问服务
+sudo nohup hive -service metastore 2>&1 &
+ps -ef | grep metastore   >> RunJar
+
+启动hiveserver2
+sudo nohup hive -service hiveserver2 2>&1 &
+ps -ef | grep hiveserver2  >> RunJar
+
+尝试远程访问hiveserver2 (注这里的 user passwd 必须是可通过 HQL 执行 MR 的授权用户)
+beeline -u jdbc:hive2://localhost:10000 -n "huhao" -p 'huhao'
+等效于
+huhao:conf huhao$ beeline
+beeline> !connect jdbc:hive2://localhost:10000 huhao huhao
+0: jdbc:hive2://localhost:10000> show databases;
++----------------+--+
+| database_name  |
++----------------+--+
+| applogsdb      |
+| default        |
++----------------+--+
+2 rows selected (2.475 seconds)
+0: jdbc:hive2://localhost:10000> use applogsdb;
+No rows affected (0.092 seconds)
+0: jdbc:hive2://localhost:10000> select count(*) from ext_error_logs;
++------+--+
+| _c0  |
++------+--+
+| 4    |
++------+--+
+
+辅助脚本
+vim hs2_info.sh
+-----------------------------------------------------------------------------------------------
+#!/bin/sh
+
+echo '\n---------- start hiveserver2 ----------'
+echo 'nohup hive --service metastore 2>&1 &'
+echo 'nohup hive --service hiveserver2 2>&1 &'
+
+echo '\n---------- stop hiveserver2 ------------'
+echo """ps -ef  | grep hiveserver2 | grep -v 'grep' |awk -F' ' '{print \$2}' | xargs kill"""
+echo """ps -ef  | grep metastore | grep -v 'grep' |awk -F' ' '{print \$2}' | xargs kill"""
+
+echo "\n----------- beeline --------------"
+echo 'beeline -u jdbc:hive2://localhost:10000 -n "huhao" -p "huhao"'
+
+echo "\n"
+-----------------------------------------------------------------------------------------------

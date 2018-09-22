@@ -1,0 +1,242 @@
+复习：
+	安装流程
+		解压安装
+		配置文件修改
+		Mysql安装（可以使用其他数据库）
+		log4j的修改
+	启动命令
+		$ bin/hive 针对的是本地启动
+	建表语句
+		create table if not exists db_hive_demo.emp(
+			empno int,
+			ename string,
+			job string,
+			mgr int,
+			hiredate string,
+			sal double,
+			comm double,
+			deptno int)
+			row format delimited fields terminated by '\t';
+	导入数据
+		load data local(该关键字表明数据是从Linux本地加载，如果没有该关键字，则 从HDFS上加载)
+		desc formatted table;
+Hive框架基础（二）
+	理性认知：
+		* Hive的MapReduce任务
+			<property>
+  				<name>hive.fetch.task.conversion</name>
+  				<value>more</value>
+  				<description>
+    			Some select queries can be converted to single FETCH task minimizing latency.
+    			Currently the query should be single sourced not having any subquery and should not have
+    			any aggregations or distincts (which incurs RS), lateral views and joins.
+    			1. minimal : SELECT STAR, FILTER on partition columns, LIMIT only
+    			2. more    : SELECT, FILTER, LIMIT only (TABLESAMPLE, virtual columns)
+  				</description>
+			</property>
+		* Hive的元数据库的备份与还原
+			常见错误：启动Hive时，无法初始化metastore数据库，无法创建连接，无法创建会话。
+				可能性分析：
+					1、hive的metastore数据库丢失了，比如drop，比如文件损坏
+					2、metasotre版本号不对。
+					3、远程表服务
+			备份的基本语法：
+				$ mysqldump -uroot -p metastore > metastore.sql
+			还原的基本语法：
+				$ mysql -uroot -p metastore < metastore.sql
+			复习：find命令，查找metastore.sql默认存放位置
+		* Hive操作HQL语句的两个参数
+			一般使用：
+				oozie
+				azakban
+				crontab
+			hive -e ""
+			hive -f 文件.hql
+
+			练习：
+				1、创建部门，员工信息表
+					hive> create table if not exists db_hive_demo.dept(
+						deptno int,
+						dname string,
+						loc string)
+					row format delimited fields terminated by '\t';
+
+
+					hive> create table if not exists db_hive_demo.emp(
+					empno int,
+					ename string,
+					job string,
+					mgr int,
+					hiredate string,
+					sal double,
+					comm double,
+					deptno int)
+					row format delimited fields terminated by '\t';
+				2、导入数据
+					hive (default)> load data local inpath '/home/admin/Desktop/dept.txt' into table db_hive_demo.dept;
+					hive (default)> load data local inpath '/home/admin/Desktop/dept.txt' into table db_hive_demo.dept;
+		* Hive历史命令存放地
+			cat ~/.hivehistory
+			主要用于排查逻辑错误或者查看常用命令
+		* Hive临时生效设置
+			固定语法：set 属性名=属性值
+			例如：set hive.cli.print.header=false;
+		* Hive的内部表与外部表
+			伪代码：
+			hive> CREATE TABLE custom_table(id int, name string)  location '/custom/z/hive/somedatabase'
+			默认情况：inner
+				hive> CREATE INNER TABLE（报错）
+			显示指定：external
+				hive> CREATE EXTERNAL TABLE
+
+			内部表：
+				删除表数据时，连同数据源以及元数据信息同时删除
+			外部表：
+				1、只会删除元数据信息。
+				2、共享数据，外部表相对而言也更加方便和安全。
+
+			相同之处：
+				如果你导入数据时，操作于HDFS上，则会将数据进行迁移，并在metastore留下记录，而不是copy数据源。
+		* Hive分区表
+			创建分区表：create database if not exists db_web_data ;
+
+				create table if not exists db_web_data.track_log(
+
+				id              string,
+
+				url            string,
+
+				referer        string,
+
+				keyword        string,
+
+				type            string,
+
+				guid            string,
+
+				pageId          string,
+
+				moduleId        string,
+
+				linkId          string,
+
+				attachedInfo    string,
+
+				sessionId      string,
+
+				trackerU        string,
+
+				trackerType    string,
+
+				ip              string,
+
+				trackerSrc      string,
+
+				cookie          string,
+
+				orderCode      string,
+
+				trackTime      string,
+
+				endUserId      string,
+
+				firstLink      string,
+
+				sessionViewNo  string,
+
+				productId      string,
+
+				curMerchantId  string,
+
+				provinceId      string,
+
+				cityId          string,
+
+				fee            string,
+
+				edmActivity    string,
+
+				edmEmail        string,
+
+				edmJobId        string,
+
+				ieVersion      string,
+
+				platform        string,
+
+				internalKeyword string,
+
+				resultSum      string,
+
+				currentPage    string,
+
+				linkPosition    string,
+
+				buttonPosition  string
+
+				)
+				partitioned by (date string,hour string) -- 分区表的分区字段以逗号分隔
+				row format delimited fields terminated by '\t';
+			导入数据到分区表：
+				hive> load data local inpath '/home/admin/Desktop/2015082818' into table db_web_data.track_log partition(date='20150828', hour='18');
+			查询分区表中的数据：
+				hive> select url from track_log where date='20150828';查询28整天的数据
+				hive> select url from track_log where date='20150828' and hour='18'; 查询28号18时那一刻的数据
+				select url from track_log where date='20150828' and hour='18' limit 1;显示第一条
+
+			练习：
+				1、尝试将2015082818,2015082819两个文件上传到HDFS之后，再load data
+
+		* 案例：见HQL案例文档
+		* Hive查看Mapreduce转换结构
+			例如：hive (db_web_data)> explain SELECT deptno, MAX(sal) FROM db_hive_demo.emp GROUP BY deptno;
+		* 常见函数
+			avg
+			sum
+			min
+			max
+			cast
+			case
+		练习：
+			1、统计所有部门的薪资总和（不包含提成）并显示。
+			2、统计部门薪资，如果该部门所需薪资大于3000，则砍掉该部门。
+			3、统计每个职业的平均薪资，显示出“职业”，“平均薪资”
+		* HiveServer2
+			配置：hive-site.xml
+				hive.server2.thrift.port --> 10000
+				hive.server2.thrift.bind.host --> hadoop-senior01.itguigu.com
+				hive.server2.long.polling.timeout -- > 5000（去掉L）
+			检查端口：
+				$ sudo netstat -antp | grep 10000
+			启动服务：
+				$ bin/hive --service hiveserver2
+			连接服务：
+				$ bin/beeline
+				beeline> !connect jdbc:hive2://hadoop-senior01.itguigu.com:10000
+			尖叫提示：注意此时不能够执行MR任务调度，报错：
+			Job Submission failed with exception 'org.apache.hadoop.security.AccessControlException(Permission denied: user=anonymous, access=EXECUTE, inode="/tmp/hadoop-yarn":admin:supergroup:drwxrwx---
+
+		* UDF
+			写一个函数实现字段属性值的大小写转换
+			<dependency>
+   				<groupId>org.apache.hive</groupId>
+   				<artifactId>hive-jdbc</artifactId>
+   				<version>0.13.1</version>
+   			</dependency>
+
+   			<dependency>
+   				<groupId>org.apache.hive</groupId>
+   				<artifactId>hive-exec</artifactId>
+   				<version>0.13.1</version>
+   			</dependency>
+
+            add jar helloudf.jar;
+            或
+            export HIVE_AUX_JARS_PATH=$HIVE_HOME/extlib
+            cp hive-test-1.0-SNAPSHOT.jar $HIVE_AUX_JARS_PATH
+
+            create temporary function toUpper as 'com.big.data.udf.LowerCaseUDF';
+
+            select toUpper(uploader) from youtube_user_orc limit 3;
+
+            drop temporary function toUpper;

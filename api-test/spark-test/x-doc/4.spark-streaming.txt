@@ -1,0 +1,807 @@
+0.  对RDD 的转换有 RD 和  PairRDDFunctions
+    对应DStream的转换有：DStream 和 PairDStreamFunctions
+
+    DStream 与 RDD 之间的转换，传入RDD，返回RDD
+    def transform[U](transformFunc : scala.Function1[org.apache.spark.rdd.RDD[T], org.apache.spark.rdd.RDD[U]])(implicit evidence$5 : scala.reflect.ClassTag[U]) : org.apache.spark.streaming.dstream.DStream[U] = { /* compiled code */ }
+
+    保存操作
+    saveAsTextFile() saveAsHadoopFile() saveAsObjectFile()
+
+    遍历操作
+    def foreachRDD(foreachFunc : scala.Function1[org.apache.spark.rdd.RDD[T], scala.Unit]) : scala.Unit = { /* compiled code */ }
+
+
+
+
+1.SocketTextStreaming 从指定端口取数据
+    // 接收器 本身会使用 一个 CPU，程序计算至少需要 1个CPU，因此 local[2] 至少 2 个 CPU 以上才能运行。
+    val conf = new SparkConf().setMaster("local[2]").setAppName(this.getClass.getSimpleName)
+    val ssc = new StreamingContext(conf, Seconds(1)) // 每 1 秒 一个批次
+
+    // Create a DStream that will connect to hostname:port, like localhost:9999
+    /*
+      telnet localhost 9999 监控端口
+      nc -lk 9999 充当发送数据服务端
+      nc localhost 9999 充当结束数据客户端
+      netcat 服务端可以向多可 客户端广播消息，但只能与一个客户端绑定，建立连接。
+     */
+    val lines = ssc.socketTextStream("localhost", 9999)
+
+    // Split each line into words
+    val words = lines.flatMap(_.split(" "))
+
+    //import org.apache.spark.streaming.StreamingContext._ // not necessary since Spark 1.3
+    // Count each word in each batch
+    val pairs = words.map(word => (word, 1))
+    val wordCounts = pairs.reduceByKey(_ + _)
+
+    // Print the first ten elements of each RDD generated in this DStream to the console
+    wordCounts.print()
+
+    ssc.start() // Start the computation
+    ssc.awaitTermination() // Wait for the computation to terminate
+
+    启动流程：
+        nc -lk 9999 启动服务端口
+        运行程序
+        查看打印信息
+
+    -------------------------------------------
+    Time: 1529579368000 ms
+    -------------------------------------------
+    (haha,1)
+    (wa,2)
+    (bob,1)
+
+2.textFileStream 基于文件目录创建RDD
+    // 必须使用 两个以上线程
+    val conf = new SparkConf().setMaster("local[2]").setAppName(this.getClass.getSimpleName)
+    val ssc = new StreamingContext(conf, Seconds(1)) // 每 1 秒 一个批次
+
+    try{
+      val lines = ssc.textFileStream("hdfs://localhost:9000/tmp/spark/ssc/in/")
+      val words = lines.flatMap(_.split(" "))
+
+      val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
+      wordCounts.print()
+
+      ssc.start()
+      ssc.awaitTermination()
+
+    }finally {
+      ssc.stop()
+    }
+    注意事项：监控到有新文件(INODE)上传到指定文件系统路径下,就读取，按指定频率构建RDD。重命名不会被识别为新文件。
+    a.启动 app;b.上传文件到指定 hdfs 路径；
+
+3.自定义数据源
+    import java.io.{BufferedReader, InputStreamReader}
+    import java.net.Socket
+    import java.nio.charset.StandardCharsets
+    import org.apache.spark.SparkConf
+    import org.apache.spark.storage.StorageLevel
+    import org.apache.spark.streaming.{Seconds, StreamingContext}
+    import org.apache.spark.streaming.receiver.Receiver
+    import org.slf4j.LoggerFactory
+
+    /**
+      * Author: Huhao <huhao1@cmc.com>
+      * Date: 2018/6/21
+      * Desc:
+      *
+      */
+    trait Logging {
+      val logger = LoggerFactory.getLogger(this.getClass.getSimpleName)
+    }
+    class CustomReceiver(host: String, port: Int)
+      extends Receiver[String](StorageLevel.MEMORY_AND_DISK_2) with Logging{
+
+      def onStart() {
+        // Start the thread that receives data over a connection
+        new Thread("Socket Receiver") {
+          override def run() {
+            receive()
+            logger.info("Socket Receiver Start")
+          }
+        }.start()
+      }
+
+      def onStop() {
+        // There is nothing much to do as the thread calling receive()
+        // is designed to stop by itself if isStopped() returns false
+        logger.info("Socket Receiver Stop")
+      }
+
+      /** Create a socket connection and receive data until receiver is stopped */
+      private def receive() {
+        var socket: Socket = null
+        var userInput: String = null
+        try {
+          // Connect to host:port
+          socket = new Socket(host, port)
+
+          // Until stopped or connection broken continue reading
+          val reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
+          userInput = reader.readLine()
+          while(!isStopped && userInput != null) {
+            store(userInput)
+            userInput = reader.readLine()
+          }
+          reader.close()
+          socket.close()
+
+          // Restart in an attempt to connect again when server is active again
+          restart("Trying to connect again")
+          logger.info("Trying to connect again")
+        } catch {
+          case e: java.net.ConnectException =>
+            // restart if could not connect to server
+            restart("Error connecting to " + host + ":" + port, e)
+          case t: Throwable =>
+            // restart if there is any other error
+            restart("Error receiving data", t)
+        }
+      }
+    }
+
+    object CustomReceiverTest extends App{
+      // 必须使用 两个以上线程
+      val conf = new SparkConf().setMaster("local[2]").setAppName(this.getClass.getSimpleName)
+      val ssc = new StreamingContext(conf, Seconds(1)) // 每 1 秒 一个批次
+
+      try{
+        val customReceiverStream = ssc.receiverStream(new CustomReceiver("localhost", 9999))
+        val words = customReceiverStream.flatMap(_.split(" "))
+
+        val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
+        wordCounts.print()
+
+        ssc.start()
+        ssc.awaitTermination()
+
+      }finally {
+        ssc.stop()
+      }
+    }
+
+    启动流程：nc -lk 9999 => app
+
+4.QueueRDDReceiver 将指定RDD 塞入Queue 队列 构架DStream
+    import org.apache.spark.SparkConf
+    import org.apache.spark.rdd.RDD
+    import org.apache.spark.streaming.{Seconds, StreamingContext}
+
+    import scala.collection.mutable
+
+    /*
+     测试过程中，可以通过使用streamingContext.queueStream(queueOfRDDs)来创建DStream，
+     每一个推送到这个队列中的RDD，都会作为一个DStream处理。
+     */
+    object QueueRDDReceiver {
+
+      def main(args: Array[String]) {
+
+        val conf = new SparkConf().setMaster("local[2]").setAppName("QueueRDDReceiver")
+        val ssc = new StreamingContext(conf, Seconds(1))
+
+        // Create the queue through which RDDs can be pushed to
+        // a QueueInputDStream
+        //创建RDD队列
+        val rddQueue = new mutable.SynchronizedQueue[RDD[Int]]()
+
+        // Create the QueueInputDStream and use it do some processing
+        // 创建QueueInputDStream
+        val inputStream = ssc.queueStream(rddQueue)
+
+        //处理队列中的RDD数据
+        val mappedStream = inputStream.map(x => (x % 10, 1))
+        val reducedStream = mappedStream.reduceByKey(_ + _)
+
+        //打印结果
+        reducedStream.print()
+
+        //启动计算
+        ssc.start()
+
+        // Create and push some RDDs into
+        for (i <- 1 to 30) {
+          rddQueue += ssc.sparkContext.makeRDD(1 to 300, 10)
+          Thread.sleep(2000)
+
+          //通过程序停止StreamingContext的运行
+          //ssc.stop()
+        }
+      }
+    }
+
+5.kafkaDStraming
+    1). pom.xml
+    <dependency>
+        <groupId>org.apache.kafka</groupId>
+        <artifactId>kafka-clients</artifactId>
+        <version>0.10.2.1</version>
+    </dependency>
+
+    <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-streaming-kafka-0-10 -->
+    <dependency>
+        <groupId>org.apache.spark</groupId>
+        <artifactId>spark-streaming-kafka-0-10_2.11</artifactId>
+        <version>2.1.1</version>
+    </dependency>
+
+    2). kafka 池化
+    import java.util.Properties
+
+    import org.apache.commons.pool2.impl.{DefaultPooledObject, GenericObjectPool, GenericObjectPoolConfig}
+    import org.apache.commons.pool2.{BasePooledObjectFactory, PooledObject}
+    import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
+
+
+    // --------------------------------- 代理对象
+    case class KafkaProducerProxy(brokerList: String,
+                                  producerConfig: Properties = new Properties,
+                                  defaultTopic: Option[String] = None,
+                                  producer: Option[KafkaProducer[String, String]] = None) {
+
+      type Key = String
+      type Val = String
+
+      require(brokerList == null || !brokerList.isEmpty, "Must set broker list")
+
+      private val p = producer getOrElse {
+
+        var props:Properties= new Properties();
+        props.put("bootstrap.servers", brokerList);
+        props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+        props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+
+        new KafkaProducer[String,String](props)
+      }
+
+
+      private def toMessage(value: Val, key: Option[Key] = None, topic: Option[String] = None): ProducerRecord[Key, Val] = {
+        val t = topic.getOrElse(defaultTopic.getOrElse(throw new IllegalArgumentException("Must provide topic or default topic")))
+        require(!t.isEmpty, "Topic must not be empty")
+        key match {
+          case Some(k) => new ProducerRecord(t, k, value)
+          case _ => new ProducerRecord(t, value)
+        }
+      }
+
+      def send(key: Key, value: Val, topic: Option[String] = None) {
+        p.send(toMessage(value, Option(key), topic))
+      }
+
+      def send(value: Val, topic: Option[String]) {
+        send(null, value, topic)
+      }
+
+      def send(value: Val, topic: String) {
+        send(null, value, Option(topic))
+      }
+
+      def send(value: Val) {
+        send(null, value, None)
+      }
+
+      def shutdown(): Unit = p.close()
+
+    }
+
+    // --------------------------------- 抽象代理工厂
+    abstract class KafkaProducerFactory(brokerList: String, config: Properties, topic: Option[String] = None) extends Serializable {
+
+      def newInstance(): KafkaProducerProxy
+    }
+
+    // --------------------------------- 创建代理工厂
+    class BaseKafkaProducerFactory(brokerList: String,
+                                   config: Properties = new Properties,
+                                   defaultTopic: Option[String] = None)
+      extends KafkaProducerFactory(brokerList, config, defaultTopic) {
+
+      override def newInstance() = new KafkaProducerProxy(brokerList, config, defaultTopic)
+
+    }
+
+    // --------------------------------- 创建代理对象
+    class PooledKafkaProducerAppFactory(val factory: KafkaProducerFactory)
+      extends BasePooledObjectFactory[KafkaProducerProxy] with Serializable {
+
+      override def create(): KafkaProducerProxy = factory.newInstance()
+
+      override def wrap(obj: KafkaProducerProxy): PooledObject[KafkaProducerProxy] = new DefaultPooledObject(obj)
+
+      override def destroyObject(p: PooledObject[KafkaProducerProxy]): Unit = {
+        p.getObject.shutdown()
+        super.destroyObject(p)
+      }
+    }
+
+    // --------------------------------- 创建代理对象 连接池
+    object KafkaProducerPool{
+
+      def apply(brokerList: String, topic: String):  GenericObjectPool[KafkaProducerProxy] = {
+        val producerFactory = new BaseKafkaProducerFactory(brokerList, defaultTopic = Option(topic))
+        val pooledProducerFactory = new PooledKafkaProducerAppFactory(producerFactory)
+        val poolConfig = {
+          val c = new GenericObjectPoolConfig
+          val maxNumProducers = 10
+          c.setMaxTotal(maxNumProducers)
+          c.setMaxIdle(maxNumProducers)
+          c
+        }
+        new GenericObjectPool[KafkaProducerProxy](pooledProducerFactory, poolConfig)
+      }
+    }
+
+    3).构建kafkaDS
+    import org.apache.commons.pool2.impl.{GenericObjectPool, GenericObjectPoolConfig}
+    import org.apache.kafka.clients.consumer.ConsumerRecord
+    import org.apache.kafka.common.serialization.StringDeserializer
+    import org.apache.spark.SparkConf
+    import org.apache.spark.api.java.function.VoidFunction
+    import org.apache.spark.rdd.RDD
+    import org.apache.spark.streaming.kafka010.{ConsumerStrategies, KafkaUtils, LocationStrategies}
+    import org.apache.spark.streaming.{Seconds, StreamingContext}
+
+     val conf = new SparkConf().setMaster("local[4]").setAppName("NetworkWordCount")
+        val ssc = new StreamingContext(conf, Seconds(1))
+
+        //创建topic
+        // val brobrokers = "172.16.148.150:9092,172.16.148.151:9092,172.16.148.152:9092"
+        val brobrokers = "localhost:9092"
+        val sourcetopic="ssc_in";
+        val targettopic="ssc_out";
+
+        //创建消费者组
+        var group="con-consumer-group"
+        //消费者配置
+        val kafkaParam = Map(
+          "bootstrap.servers" -> brobrokers,//用于初始化链接到集群的地址
+          "key.deserializer" -> classOf[StringDeserializer],
+          "value.deserializer" -> classOf[StringDeserializer],
+          //用于标识这个消费者属于哪个消费团体
+          "group.id" -> group,
+          //如果没有初始化偏移量或者当前的偏移量不存在任何服务器上，可以使用这个配置属性
+          //可以使用这个配置，latest自动重置偏移量为最新的偏移量
+          "auto.offset.reset" -> "latest",
+          //如果是true，则这个消费者的偏移量会在后台自动提交
+          "enable.auto.commit" -> (false: java.lang.Boolean)
+        );
+
+        //ssc.sparkContext.broadcast(pool)
+
+        //创建DStream，返回接收到的输入数据
+        var stream=KafkaUtils.createDirectStream[String,String](ssc, LocationStrategies.PreferConsistent,ConsumerStrategies.Subscribe[String,String](Array(sourcetopic),kafkaParam))
+
+        //每一个stream都是一个ConsumerRecord
+        stream.map(s =>("id:" + s.key(),">>>>:"+s.value())).foreachRDD(rdd => {
+          rdd.foreachPartition(partitionOfRecords => {
+            // Get a producer from the shared pool 每个分区以个连接池
+            val pool = KafkaProducerPool(brobrokers, targettopic)
+            val p = pool.borrowObject()
+
+            partitionOfRecords.foreach {message => System.out.println(message._2);p.send(message._2,Option(targettopic))}
+
+            // Returning the producer to the pool also shuts it down
+            pool.returnObject(p)
+
+          })
+        })
+
+        ssc.start()
+        ssc.awaitTermination()
+
+     4).启动kafka,分别创建 ssc_in, ssc_out 两个 topic,然后启动 app, 从ssc_in 输入的消息，会被 app 消费，然后插入 ssc_out.
+     spark-submit --class com.big.data.sparkstreaming.kafka.KafkaReceiver /Users/huhao/software/idea_proj/data-base/api-test/spark-test/spark-streaming/target/sparkstreaming-test-jar-with-dependencies.jar
+
+     <build>
+             <finalName>sparkstreaming-test</finalName>
+             <plugins>
+                 <!-- 打jar包插件(会包含所有依赖) -->
+                 <plugin>
+                     <groupId>org.apache.maven.plugins</groupId>
+                     <artifactId>maven-assembly-plugin</artifactId>
+                     <version>3.0.0</version>
+                     <configuration>
+                         <descriptorRefs>
+                             <descriptorRef>jar-with-dependencies</descriptorRef>
+                         </descriptorRefs>
+                         <archive>
+                             <manifest>
+                                 <!-- 入口-->
+                                 <mainClass>com.big.data.sparkstreaming.kafka.KafkaReceiver</mainClass>
+                             </manifest>
+                         </archive>
+                     </configuration>
+                     <executions>
+                         <execution>
+                             <id>make-assembly</id>
+                             <phase>package</phase>
+                             <goals>
+                                 <goal>single</goal>
+                             </goals>
+                         </execution>
+                     </executions>
+                 </plugin>
+             </plugins>
+         </build>
+
+ 6.Flume to Spark Streaming - Pull model
+    1）依赖选型
+       <dependency>
+                <groupId>org.apache.spark</groupId>
+                <artifactId>spark-streaming-flume_2.11</artifactId>
+                <version>2.3.1</version>
+       </dependency>
+    2）flume lib 更新
+        参照如下 maven 坐标，拷贝对应 jar 到 flume 的lib 目录
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-streaming-flume-sink_2.11</artifactId>
+            <version>1.2.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+            <version>2.11.11</version>
+        </dependency>
+
+        cp /Users/huhao/apache-maven-3.3.9/repository/org/apache/spark/spark-streaming-flume-sink_2.11/1.2.0/spark-streaming-flume-sink_2.11-1.2.0.jar /Users/huhao/software/flume-1.8.0/lib/
+        cp /Users/huhao/apache-maven-3.3.9/repository/org/scala-lang/scala-library/2.11.11/scala-library-2.11.11.jar /Users/huhao/software/flume-1.8.0/lib/
+        移出flume 原生 scala-library ,不然等 spark_sink 接入时抛异常java.lang.IllegalStateException: begin() called when transaction is OPEN!
+        mv /Users/huhao/software/flume-1.8.0/lib/scala-library-2.10.5.jar /Users/huhao/software/flume-1.8.0/
+
+    3）flume agent 配置
+        ##  功能: flume 接受 4040 端口发送的数据，然后交给 spark 消费
+        # 启动 agent: nohup bin/flume-ng agent  --conf conf/ --name cons2spark_agent --conf-file agent/cons2spark_agent.conf -Dflume.root.logger=DEBUG,console 2>&1 &
+        # 输入: netcat localhost 4040
+
+        # 声明组件
+        cons2spark_agent.sources = mycat
+        cons2spark_agent.sinks = logger spark
+        cons2spark_agent.channels = memory1 memory2
+
+        # 定义 source 并拷贝副本
+        cons2spark_agent.sources.mycat.type = netcat
+        cons2spark_agent.sources.mycat.bind = localhost
+        cons2spark_agent.sources.mycat.port = 44444
+        cons2spark_agent.sources.mycat.selector.type = replicating
+
+
+        # 定义 sparksink 输出
+        cons2spark_agent.sinks.spark.type = org.apache.spark.streaming.flume.sink.SparkSink
+        cons2spark_agent.sinks.spark.hostname = localhost
+        cons2spark_agent.sinks.spark.port = 9999
+        cons2spark_agent.sinks.spark.channel = memory1
+
+        # 定义 loggesink 输出
+        cons2spark_agent.sinks.logger.type=logger
+
+        # 定义两个 channel ## 基于内存,构建数据通道
+        cons2spark_agent.channels.memory1.type = memory
+        cons2spark_agent.channels.memory1.capacity = 1000
+        cons2spark_agent.channels.memory1.transactionCapacity = 100
+
+        cons2spark_agent.channels.memory2.type = memory
+        ## 数据通道最大事件个数负载(默认1000)
+        cons2spark_agent.channels.memory2.capacity = 1000
+        ## 数据单次会话最大事件负载(默认100)
+        cons2spark_agent.channels.memory2.transactionCapacity = 100
+
+        # 组装
+        cons2spark_agent.sources.mycat.channels = memory1 memory2
+        cons2spark_agent.sinks.logger.channel=memory1
+        cons2spark_agent.sinks.spark.channel=memory2
+
+    4）FlumeReceiver
+        val sparkConf = new SparkConf().setMaster("local[2]").setAppName(getClass.getSimpleName)
+        val sparkStreamingContext = new StreamingContext(sparkConf,Seconds(1))
+
+        val stream = FlumeUtils.createPollingStream(sparkStreamingContext,"localhost",9999)
+        //   val lines = FlumeUtils.createStream(sparkStreamingContext,hostName,port)
+
+        val mappedlines = stream.map{ sparkFlumeEvent =>
+          val event = sparkFlumeEvent.event
+          println("Value of event " + event)
+          println("Value of event Header " + event.getHeaders)
+          println("Value of event Schema " + event.getSchema)
+          val messageBody = new String(event.getBody.array())
+          println("Value of event Body " + messageBody)
+          messageBody
+        }.print()
+
+
+        stream.count().map(cnt => "Received " + cnt + " flume events." ).print()
+        sparkStreamingContext.start()
+        sparkStreamingContext.awaitTermination()
+
+    5) 启动流程
+        启动flume, tail -f logs/flume.log 监控日志 》》  - Starting Sink spark
+        启动 app, 》》Starting Spark Sink: spark on port: 9999
+        启动 netcat localhost 9999 》》  - Starting Source netcat1
+        netcat 输入字符 》》dd bb dd 》》 app 收集消息 Value of event Body dd bb dd
+    6）关机
+        ps -ef | grep 'cons2spark_agent.conf' | grep -v 'grep' | awk -F' ' '{print $2}' | xargs kill -9
+
+7.tatefuleCal有状态计算
+    // 定义更新状态方法，参数values为当前批次单词频度，state为以往批次单词频度
+        // Seq 是 从 同一批 RDD 通过 mr 流程计算得到的 指定 key 的 value ,在此函数中进行 跨 RDD 聚合
+        val updateFunc = (values: Seq[Int], state: Option[Int]) => {
+          val currentCount = values.foldLeft(0)(_ + _)
+          val previousCount = state.getOrElse(0)
+          Some(currentCount + previousCount)
+        }
+
+        // 至少启动两个线程 local[2],一个用于采集，一个用于计算
+        val conf = new SparkConf().setMaster("local[2]").setAppName(getClass.getSimpleName)
+        val ssc = new StreamingContext(conf, Seconds(3))
+
+        // 通过chechpoint 斩断依赖链，提高性能
+        ssc.checkpoint("./api-test/spark-test/spark-streaming/checkpoint/")
+
+        // Create a DStream that will connect to hostname:port, like localhost:9999
+        val lines = ssc.socketTextStream("localhost", 9999)
+
+        // 各 RDD 不同分区内部进行 MR 统计
+        // Split each line into words
+        val words = lines.flatMap(_.split(" "))
+
+        //import org.apache.spark.streaming.StreamingContext._ // not necessary since Spark 1.3
+        // Count each word in each batch
+        val pairs = words.map(word => (word, 1))
+
+        // 使用updateStateByKey来更新状态，统计从运行开始以来单词总的次数
+        // 方案1：各 partition 只执行 map ,然后统一到状态函数中聚合
+        //    val stateDstream = pairs.updateStateByKey[Int](updateFunc)
+
+        // 方案2：RDD 内部先汇总，然后在 updateFunc 中对 各RDD 进行汇总
+        val wordCounts = pairs.reduceByKey(_ + _)
+        val stateDstream = wordCounts.updateStateByKey[Int](updateFunc)
+
+        stateDstream.print()
+
+        //val wordCounts = pairs.reduceByKey(_ + _)
+
+        // Print the first ten elements of each RDD generated in this DStream to the console
+        //wordCounts.print()
+
+        ssc.start()             // Start the computation
+        ssc.awaitTermination()  // Wait for the computation to terminate
+        //ssc.stop()
+
+        启动流程：
+            1) 启动 necat :nc -lk 9999
+            2) 启动 app
+            3) 输入数据观察状态累加更新
+
+
+8.transform DStream => RDD
+      def transform[U](transformFunc : scala.Function1[org.apache.spark.rdd.RDD[T], org.apache.spark.rdd.RDD[U]])(implicit evidence$5 : scala.reflect.ClassTag[U]) : org.apache.spark.streaming.dstream.DStream[U] = { /* compiled code */ }
+            val conf = new SparkConf().set("spark.streaming,stopGracefullyOnShutdown","true").setMaster("local[2]").setAppName(this.getClass.getSimpleName)
+            val ssc = new StreamingContext(conf, Seconds(1)) // 每 1 秒 一个批次
+
+            try{
+                val lines = ssc.socketTextStream("localhost", 9999)
+
+                //1.无状态 wordcount :DStream 转换为 RDD 使用
+                lines.transform(rdd=>rdd.flatMap(_.split(" "))).map((_,1)).reduceByKey(_+_).foreachRDD(_.foreach(println))
+
+                ssc.start()
+                ssc.awaitTermination()
+
+            }finally {
+                ssc.stop()
+            }
+
+9.Window 窗口函数
+    window 合并多少个 RDD 批次，duration 每隔多少个批次计算一次
+    def window(windowDuration : org.apache.spark.streaming.Duration) : org.apache.spark.streaming.dstream.DStream[T] = { /* compiled code */ }
+
+    // 1). 无状态 汇总
+        val conf = new SparkConf().set("spark.streaming,stopGracefullyOnShutdown","true").setMaster("local[2]").setAppName(this.getClass.getSimpleName)
+        val ssc = new StreamingContext(conf, Seconds(1)) // 每 1 秒 一个批次
+
+        // 设置检查点目录保存每次状态
+        ssc.sparkContext.setCheckpointDir("api-test/spark-test/spark-streaming/checkpoint")
+        val ds = ssc.socketTextStream("localhost", 9999)
+        // 3.每3个批次合并出一个窗口，每隔2个批次合并一次，无状态保存
+        val windowDS = ds.window(Seconds(3),Seconds(2))
+        val windowResult = windowDS.flatMap(_.split(" ")).map((_,1)).reduceByKey(_+_)
+        windowResult.print()
+
+    // 对窗口进行reduce 操作
+    val windowDS = ds.flatMap(_.split(" ")).map((_,1)).reduceByWindow((a:(String,Int),b:(String,Int)) => (a._1+b._1,a._2+b._2),Seconds(3),Seconds(2))
+
+    // 有状态汇总 （每次汇总都是全量汇总）
+    def reduceByKeyAndWindow(reduceFunc : scala.Function2[V, V, V], windowDuration : org.apache.spark.streaming.Duration, slideDuration : org.apache.spark.streaming.Duration, partitioner : org.apache.spark.Partitioner) : org.apache.spark.streaming.dstream.DStream[scala.Tuple2[K, V]] = { /* compiled code */ }
+        val conf = new SparkConf().set("spark.streaming,stopGracefullyOnShutdown","true").setMaster("local[2]").setAppName(this.getClass.getSimpleName)
+        val ssc = new StreamingContext(conf, Seconds(1)) // 每 1 秒 一个批次
+
+        // 设置检查点目录保存每次状态
+        ssc.sparkContext.setCheckpointDir("api-test/spark-test/spark-streaming/checkpoint")
+        val ds = ssc.socketTextStream("localhost", 9999)
+
+        ds.flatMap(_.split(" ")).map((_,1)).reduceByKeyAndWindow((a:Int,b:Int)=>a+b,Seconds(3),Seconds(2))
+        // 等效于 window() + updateStateByKey()
+        //    val stateWindowResult = windowDS.flatMap(_.split(" ")).map((_,1)).updateStateByKey((iter:Seq[Int],state:Option[Int])=> Some(iter.sum+state.getOrElse(0)))
+        //    stateWindowResult.print()
+
+        ssc.start()
+        ssc.awaitTermination()
+    // 有状态汇总 （每次汇总都是增量汇总） 第一次 汇总取 State1(rdd1+rdd2+rdd3) 这3个批次，第二次汇总取 State2(rdd2+rdd3+rdd4) 理论上是State1 + rdd4 - rdd1 = State2
+   def reduceByKeyAndWindow(reduceFunc : scala.Function2[V, V, V], invReduceFunc : scala.Function2[V, V, V], windowDuration : org.apache.spark.streaming.Duration, slideDuration : org.apache.spark.streaming.Duration = { /* compiled code */ }, numPartitions : scala.Int = { /* compiled code */ }, filterFunc : scala.Function1[scala.Tuple2[K, V], scala.Boolean] = { /* compiled code */ }) : org.apache.spark.streaming.dstream.DStream[scala.Tuple2[K, V]] = { /* compiled code */ }
+        val conf = new SparkConf().set("spark.streaming,stopGracefullyOnShutdown","true").setMaster("local[2]").setAppName(this.getClass.getSimpleName)
+        val ssc = new StreamingContext(conf, Seconds(1)) // 每 1 秒 一个批次
+
+        // 设置检查点目录保存每次状态
+        ssc.sparkContext.setCheckpointDir("api-test/spark-test/spark-streaming/checkpoint")
+        val ds = ssc.socketTextStream("localhost", 9999)
+
+        ds.flatMap(_.split(" ")).map((_,1)).reduceByKeyAndWindow(
+          (a:Int,b:Int)=>a+b,
+          (a:Int,b:Int)=>a-b,
+          Seconds(3),
+          Seconds(2)
+        ).print()
+
+        ssc.start()
+        ssc.awaitTermination()
+
+10. 提交jar 运行 容错重试机制
+    第一步 jar 运行容错
+        standalone 集群 和  messo 集群 带上参数 --supervise
+        /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/bin/spark-submit \
+        --supervisor
+        --class com.big.data.spark.rdd.WordCountTest \
+        --master local[*] \
+        --executor-memory 1G \
+        --total-executor-cores 2 \
+        /Users/huhao/software/idea_proj/data-base/api-test/spark-test/spark-rdd/target/spark-rdd-1.0-SNAPSHOT.jar
+
+        yarn 集群 带上 --conf spark.yarn.maxAppAttempts 3 或 --conf yarn.resourcemanager.am.max-attempts 3
+
+    第二步 SparkContext 宕机 自动回复之前计算结果
+         def getOrCreateContext(checkpointDir:String) ={
+            print("new context")
+            val conf = new SparkConf().set("spark.streaming,stopGracefullyOnShutdown","true").setMaster("local[2]").setAppName(this.getClass.getSimpleName)
+            val ssc = new StreamingContext(conf,Seconds(1))
+
+            ssc.checkpoint(checkpointDir)
+
+            val sockerDS = ssc.socketTextStream("localhost",9999)
+            sockerDS.flatMap(_.split(" ")).map((_,1)).updateStateByKey((seq:Seq[Int],state:Option[Int])=> Some(seq.sum + state.getOrElse(0))).print()
+
+            ssc
+          }
+
+         def main(args: Array[String]): Unit = {
+
+            val checkpointDir = "api-test/spark-test/spark-streaming/checkpoint"
+
+            // 注 ssc 的消费行为 必须放在 getOrCreateContext 函数内部，否则会抛出异常
+            val ssc = StreamingContext.getOrCreate(checkpointDir,()=> getOrCreateContext(checkpointDir))
+
+            ssc.start()
+            ssc.awaitTermination()
+
+         }
+
+        /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/bin/spark-submit \
+        --supervise \
+        --class com.big.data.sparkstreaming.nostopping.MyRecoverableNetworkWordCount \
+        --master local[*] \
+        --executor-memory 1G \
+        --total-executor-cores 2 \
+        /Users/huhao/software/idea_proj/data-base/api-test/spark-test/spark-streaming/target/sparkstreaming-test.jar localhost 9999 hdfs://localhost:9000/tmp/spark/ssc/checkpoint
+
+        /Users/huhao/software/spark-2.1.1-bin-hadoop2.7/bin/spark-submit \
+        --class com.big.data.sparkstreaming.nostopping.MyRecoverableNetworkWordCount \
+        --master yarn \
+        --executor-memory 1G \
+        --total-executor-cores 2 \
+        --conf spark.yarn.maxAppAttempts 3  \
+        /Users/huhao/software/idea_proj/data-base/api-test/spark-test/spark-streaming/target/sparkstreaming-test.jar localhost 9999 hdfs://localhost:9000/tmp/spark/ssc/checkpoint
+
+11.累加器，广播变量 在 DStream 的 checkpoint 恢复机制中的使用
+    import org.apache.spark.{SparkConf, SparkContext}
+    import org.apache.spark.broadcast.Broadcast
+    import org.apache.spark.rdd.RDD
+    import org.apache.spark.streaming.{Seconds, StreamingContext, Time}
+    import org.apache.spark.util.LongAccumulator
+
+    // 定义广播变量
+    object WordBlacklist {
+      // DS设置了从检查点恢复数据时，如果DS 中使用 了广播变量 和 累加器，必须设置为懒汉单例模式，否则会出现初始化错误
+      @volatile private var instance: Broadcast[Seq[String]] = null
+
+      def getInstance(sc: SparkContext): Broadcast[Seq[String]] = {
+        if (instance == null) {
+          synchronized {
+            if (instance == null) {
+              val wordBlacklist = Seq("a", "b", "c")
+              instance = sc.broadcast(wordBlacklist)
+            }
+          }
+        }
+        instance
+      }
+    }
+    // 定义累加器
+    object DroppedWordsCounter {
+      // 累加器
+      @volatile private var instance: LongAccumulator = null
+
+      def getInstance(sc: SparkContext): LongAccumulator = {
+        if (instance == null) {
+          synchronized {
+            if (instance == null) {
+              instance = sc.longAccumulator("WordsInBlacklistCounter")
+            }
+          }
+        }
+        instance
+      }
+    }
+
+    // 注：为避免 sparkContext 从 checkpoint 中恢复过来时，累加器 和 广播变量初始化存在问题，需要设计为懒汉单例模式。
+    // 从 checkpoint中 恢复 sparkcontext 时，需要将业务逻辑整合到 创建 sparkcontext 的函数中
+     def getOrCreate(checkpointDir:String)={
+        val conf = new SparkConf().set("spark.streaming,stopGracefullyOnShutdown","true").setMaster("local[4]").setAppName(this.getClass.getSimpleName)
+        val ssc = new StreamingContext(conf, Seconds(1)) // 每 1 秒 一个批次
+
+        ssc.sparkContext.setCheckpointDir(checkpointDir)
+
+        ssc.checkpoint(checkpointDir)
+
+        val ds = ssc.socketTextStream("localhost", 9999)
+
+        val wordCounts = ds.flatMap(_.split(" ")).map((_,1)).reduceByKey(_+_)
+
+        wordCounts.foreachRDD { (rdd: RDD[(String, Int)], time: Time) =>
+          // Get or register the blacklist Broadcast
+          val blacklist = WordBlacklist.getInstance(rdd.sparkContext)
+          // Get or register the droppedWordsCounter Accumulator
+          val droppedWordsCounter = DroppedWordsCounter.getInstance(rdd.sparkContext)
+          // Use blacklist to drop words and use droppedWordsCounter to count them
+
+          println(droppedWordsCounter.value)
+
+          val counts = rdd.filter { case (word, count) =>
+            if (blacklist.value.contains(word)) {
+              droppedWordsCounter.add(count)
+              false
+            } else {
+              true
+            }
+          }.collect().mkString("[", ", ", "]")
+          val output = "Counts at time " + time + " " + counts
+          println(output)
+        }
+        ssc
+      }
+
+      def main(args: Array[String]): Unit = {
+        val checkpointDir = "api-test/spark-test/spark-streaming/checkpoint"
+        // checkpointDir 存在就恢复，否则就创建
+        val ssc = StreamingContext.getOrCreate(checkpointDir,()=>getOrCreate(checkpointDir))
+
+        ssc.start()
+
+        ssc.awaitTermination()
+      }
+
+12.数据完整性要求
+    设置 checkpoint 或 WAL 预写入日志，都会引起性能下降。允许出现局部数据丢失情况下，可以全部 不开启。或 只保留 checkpoint。
+    完全不允许出现数据丢失时，需要同时开启WAL 和 checkpint, checkpoint 负责保存 Job执行进度，WAL负责存储数据块。
+    WAL设置
+        val conf = new SparkConf().set("spark.streaming,stopGracefullyOnShutdown","true")
+            .set("spark.streaming.receiver.writeAheadLog.enable", "true") // >>> receivedData
+            .setMaster("local[2]").setAppName(getClass.getSimpleName)
+        val ssc = new StreamingContext(conf, Seconds(3))
+
+   checkpint 设置
+        ssc.sparkContext.setCheckpointDir(checkpointDir) // >> receivedBlockMetadata
+        ssc.checkpoint(checkpointDir)
+

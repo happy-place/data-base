@@ -1,0 +1,20 @@
+Hive框架基础（五）
+	* 理性认知：
+		1、Hive中以正则表达式分割表的方式。
+		2、Hive中UDF函数的其他使用方式。
+			2.1、添加打包后的jar
+				hive (db_web_data)> add jar /home/admin/Desktop/dateformat.jar;
+			2.2、添加临时函数
+				hive (db_web_data)> create temporary function dateformat as 'com.z.demo.udf.DataTransformUDF';
+			2.3、执行测试
+				java.text.ParseException: Unparseable date: ""31/Aug/2015:00:04:53 +0800""
+        		at java.text.DateFormat.parse(DateFormat.java:366)
+
+        	修复：
+        		2.4、定义UDF函数用于去除数据中的双引号
+        			见代码：RemoveQuotesUDF
+        		2.5、再次执行测试
+        			hive> select dateformat(remove_q(time_local)) date from baidu_log limit 1;
+        				date
+						2015-08-31 00:04:37
+						Time taken: 0.196 seconds, Fetched: 1 row(s)

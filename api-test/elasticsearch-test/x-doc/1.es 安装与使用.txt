@@ -1,0 +1,352 @@
+elastic-search 安装与使用
+
+1).下载
+        wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.2.4.tar.gz -P /opt/software
+        wget https://artifacts.elastic.co/downloads/kibana/kibana-6.2.4-linux-x86_64.tar.gz -P /opt/software
+
+2).切换普通用户，解压，注册环境
+        su - admin
+        tar -zxvf /opt/software/elasticsearch-6.2.4.tar.gz -C /opt/module
+        tar -zxvf /opt/software/kibana-6.2.4-linux-x86_64.tar.gz -C /opt/module
+
+        vim /etc/profile
+
+        ELASTIC_HOME=/opt/module/elasticsearch-6.2.4
+        PATH=$PATH:$ELASTIC_HOME/bin
+        export ELASTIC_HOME PATH
+
+        KIBANA_HOME=/opt/module/elasticsearch-6.2.4
+        PATH=$PATH:$KIBANA_HOME/bin
+        export KIBANA_HOME PATH
+
+        alias sbp="source /etc/profile && source ~/.bash_profile && source ~/.bashrc"
+        alias es_start="$ELASTIC_HOME/bin/elasticsearch -d"
+        alias es_stop="ps -ef | grep 'elasticsearch' | grep -v 'grep' | head -1 | awk -F' ' '{print $2}' | xargs kill"
+        alias kb_start="$KIBANA_HOME/bin/kibana -q &"
+        alias kb_stop="ps -ef | grep 'kibana' | head -1| grep -v 'grep' | awk -F' ' '{print $2}' | xargs kill"
+
+        source /etc/profile
+
+3).ES修改配置注册
+        vim elasticsearch-6.2.4/config/elasticsearch.yml
+        -------------------------------------------------
+        path.data: /opt/module/elasticsearch-6.2.4/data
+        path.logs: /opt/module/elasticsearch-6.2.4/logs
+         bootstrap.memory_lock: false
+         network.host: 0.0.0.0
+         discovery.zen.ping.unicast.hosts: ["locallab100"]
+
+         http.cors.enabled: true
+         http.cors.allow-origin: "*"
+         http.cors.allow-headers: X-Requested-With,X-Auth-Token,Content-Type,Content-Length
+         -------------------------------------------------
+
+4).增加 elasticsearch-process 连接数限制
+        sudo vim /etc/security/limits.d/20-nproc.conf
+        -------------------------------------------------
+        *          soft    nproc     4096
+    root       soft    nproc     unlimited
+    -------------------------------------------------
+
+        sudo vim /etc/security/limits.conf
+        -------------------------------------------------
+         admin   soft    nofile  65536
+         admin   hard    nofile  65536
+         -------------------------------------------------
+
+        sudo vim /etc/sysctl.conf
+        -------------------------------------------------
+         vm.max_map_count=655360
+         -------------------------------------------------
+
+        sysctl -p
+
+        exit 当前session 然后重新登录
+
+5.ES启动测试
+        su - admin
+
+        es_start  等效于 elasticsearch -d
+
+        curl 'http://localhost:9200/?pretty'
+        curl 'http://locallab100:9200/?pretty'
+        -------------------------------------------------
+        {
+          "name" : "DdzPBaU",
+          "cluster_name" : "elasticsearch",
+          "cluster_uuid" : "Or14VT0oR7eyVi9xAK--bQ",
+          "version" : {
+            "number" : "6.2.4",
+            "build_hash" : "ccec39f",
+            "build_date" : "2018-04-12T20:37:28.497551Z",
+            "build_snapshot" : false,
+            "lucene_version" : "7.2.1",
+            "minimum_wire_compatibility_version" : "5.6.0",
+            "minimum_index_compatibility_version" : "5.0.0"
+          },
+          "tagline" : "You Know, for Search"
+        }
+
+        jps + kill 关闭
+
+6.kibana 修改配置
+        vim kibana-6.2.4-linux-x86_64/config/kibana.yml
+        -------------------------------------------------
+        server.host: "0.0.0.0"
+        elasticsearch.username: "elastic"  <<< 暂时没有设置密码，可以不配
+         elasticsearch.password: "elastic"
+        -------------------------------------------------
+
+7.kibana启动测试
+        kb_start  等效于 bin/kibana -q
+        出现 [info][listening] Server running at http://0.0.0.0:5601 日志 表明启动成功
+
+        http://locallab100:5601 访问
+
+8.ES扩展 ik 分词器插件
+        elasticsearch-analysis-ik 中文分词插件
+
+        cd /opt/softwware/git_repo
+        git clone https://github.com/medcl/elasticsearch-analysis-ik
+
+        cd elasticsearch-analysis-ik/
+        mvn package -Pdist,native -DskipTests -Dtar
+
+        cd target/releases
+        unzip elasticsearch-analysis-ik-6.2.4.zip
+
+        mv elasticsearch /opt/module/elasticsearch-6.2.4/plugins/
+
+        es_stop
+
+        es_start
+
+        tail -f logs/elasticsearch.log  << 监控到成功加载插件
+
+9.中文分词测试
+        GET _analyze
+        {
+          "analyzer" : "ik_max_word",
+          "text" : "中国人"
+        }
+        -------------------------------------------------
+        {
+          "tokens": [
+            {
+              "token": "中国人",
+              "start_offset": 0,
+              "end_offset": 3,
+              "type": "CN_WORD",
+              "position": 0
+            },
+            {
+              "token": "中国",
+              "start_offset": 0,
+              "end_offset": 2,
+              "type": "CN_WORD",
+              "position": 1
+            },
+            {
+              "token": "国人",
+              "start_offset": 1,
+              "end_offset": 3,
+              "type": "CN_WORD",
+              "position": 2
+            }
+          ]
+        }
+        -------------------------------------------------
+
+        GET _analyze
+        {
+          "analyzer" : "standard",
+          "text" : "中国人"
+        }
+        -------------------------------------------------
+        {
+          "tokens": [
+            {
+              "token": "中",
+              "start_offset": 0,
+              "end_offset": 1,
+              "type": "<IDEOGRAPHIC>",
+              "position": 0
+            },
+            {
+              "token": "国",
+              "start_offset": 1,
+              "end_offset": 2,
+              "type": "<IDEOGRAPHIC>",
+              "position": 1
+            },
+            {
+              "token": "人",
+              "start_offset": 2,
+              "end_offset": 3,
+              "type": "<IDEOGRAPHIC>",
+              "position": 2
+            }
+          ]
+        }
+        -------------------------------------------------
+
+10.ES扩展 sql 插件
+        elasticsearch-sql sql 查询插件
+
+        方案1：源码编译
+                cd /opt/softwware/git_repo
+                git clone https://github.com/NLPchina/elasticsearch-sql.git
+
+                cd elasticsearch-sql/
+                mvn package -Pdist,native -DskipTests -Dtar
+
+                cd target
+                mkdir sql
+                cp druid.jar  elasticsearch-sql-6.2.4.0.jar  guava.jar  parent-join-client-6.2.4.jar  plugin-descriptor.properties  reindex-client-6.2.4.jar sql
+
+                mv sql /opt/module/elasticsearch-6.2.4/plugins/
+
+        方案2: 直接使用命令安装
+                ./bin/elasticsearch-plugin install https://github.com/NLPchina/elasticsearch-sql/releases/download/6.2.4.0/elasticsearch-sql-6.2.4.0.zip
+
+
+11.es-sql 插件测试
+        kb_stop && es_stop && es_start && kb_start
+
+        tail -f logs/elasticsearch.log 监控到 sql 插件load操作
+
+        postman >> [POST] http://local.lab:9200//bank/account/_bulk?pretty >> binary account.json 插入数据 index: bank, type: account
+
+        http://locallab100:9200/_sql/_explain?sql=select max(balance),min(balance),count(*) from bank limit 3  得到如下 解析 json
+        http://locallab100:9200/_sql/_explain?sql=select max(balance),min(balance),count(*) from bank/account limit 3  具体到type
+        {"from":0,"size":0,"_source":{"includes":["MAX","MIN","COUNT"],"excludes":[]},"aggregations":{"MAX(balance)":{"max":{"field":"balance"}},"MIN(balance)":{"min":{"field":"balance"}},"COUNT(*)":{"value_count":{"field":"_index"}}}}
+
+        http://locallab100:9200/_sql?sql=select max(balance),min(balance),count(*) from bank limit 3 执行查询
+        http://locallab100:9200/_sql?sql=select max(balance),min(balance),count(*) from bank/account limit 3 具体到type
+        {"took":168,"timed_out":false,"_shards":{"total":5,"successful":5,"skipped":0,"failed":0},"hits":{"total":1002,"max_score":0.0,"hits":[]},"aggregations":{"COUNT(*)":{"value":1002},"MAX(balance)":{"value":49989.0},"MIN(balance)":{"value":1011.0}}}
+
+        通过 kibana >> Dev Tools 检验
+        POST /bank/account/_search
+        {"from":0,"size":0,"_source":{"includes":["MAX","MIN","COUNT"],"excludes":[]},"aggregations":{"MAX(balance)":{"max":{"field":"balance"}},"MIN(balance)":{"min":{"field":"balance"}},"COUNT(*)":{"value_count":{"field":"_index"}}}}
+        {
+          "took": 10,
+          "timed_out": false,
+          "_shards": {
+            "total": 5,
+            "successful": 5,
+            "skipped": 0,
+            "failed": 0
+          },
+          "hits": {
+            "total": 1002,
+            "max_score": 0,
+            "hits": []
+          },
+          "aggregations": {
+            "COUNT(*)": {
+              "value": 1002
+            },
+            "MAX(balance)": {
+              "value": 49989
+            },
+            "MIN(balance)": {
+              "value": 1011
+            }
+          }
+        }
+
+12. es-sql web 界面安装
+        下载 sql web 界面
+                wget https://github.com/NLPchina/elasticsearch-sql/releases/download/5.4.1.0/es-sql-site-standalone.zip -P /opt/software
+                unzip es-sql-site-standalone.zip
+
+                cd es-sql-site-standalone/site-server
+
+                yum install nodejs
+
+                npm install express http-proxy-middleware  --save
+
+                vim node-server.js 修改 使用 http-proxy-middleware 代理
+                -------------------------------------------------
+                var express = require('express');
+                var proxy = require('http-proxy-middleware');
+                var app = express();
+                app.use(express.static('../_site'));
+                app.use('/_sql', proxy({target: 'http://localhost:9200/', changeOrigin: true}));
+
+                app.get('/', function (req, res) {
+                    res.sendFile("../_site/" + "index.html" );
+                })
+                var fs = require('fs');
+                var siteConfiguration = JSON.parse(fs.readFileSync('site_configuration.json', 'utf8'));
+                var server = app.listen(siteConfiguration.port)
+
+                // var express = require('express');
+                // var app = express();
+                // app.listen(3000);
+                -------------------------------------------------
+
+                kb_stop && es_stop && es_start && kb_start
+
+                node node-server.js &
+
+                出现 http://localhost:9200/ 提示即表明
+
+                http://local.lab:8080
+
+                SELECT max(balance),min(balance),count(*) FROM bank  << Explain
+                -------------------------------------------------
+                {
+                        "from": 0,
+                        "size": 0,
+                        "_source": {
+                                "includes": [
+                                        "MAX",
+                                        "MIN",
+                                        "COUNT"
+                                ],
+                                "excludes": []
+                        },
+                        "aggregations": {
+                                "MAX(balance)": {
+                                        "max": {
+                                                "field": "balance"
+                                        }
+                                },
+                                "MIN(balance)": {
+                                        "min": {
+                                                "field": "balance"
+                                        }
+                                },
+                                "COUNT(*)": {
+                                        "value_count": {
+                                                "field": "_index"
+                                        }
+                                }
+                        }
+                }
+                -------------------------------------------------
+
+                SELECT max(balance),min(balance),count(*) FROM bank/account  << Search
+                -------------------------------------------------
+                COUNT(*)        MAX(balance)        MIN(balance)
+                1002                49989                        1011
+                -------------------------------------------------
+
+                注：
+                        1.右上角如果刚才没对 node-server.js 进行重写，则需要修改为 http://locallab100:9200 (默认为8080)，改写后随意
+                        2.左侧可以勾选 Show Id;
+                        3.sql 结尾不得添加“;” ,否则无法解析，index 层直接可查询，具体到 type 使用 index/type
+                        4.explain 可以先分析聚合语句，然后到 kibana 中使用
+
+13.修改别名
+        vim /etc/profile
+        -------------------------------------------------
+        alias es_start="$ELASTIC_HOME/bin/elasticsearch -d && cd $ELASTIC_HOME/sql-website/site-server/ && node node-server.js &"
+        alias es_stop="ps -ef | grep 'elasticsearch' | grep -v 'grep' | head -1 | awk -F' ' '{print $2}' | xargs kill ; ps -ef | grep 'node-server.js' | grep -v 'grep' | awk -F' ' '{print $2}' | xargs kill"
+        alias kb_start="$KIBANA_HOME/bin/kibana -q &"
+        alias kb_stop="ps -ef | grep 'kibana' | head -1| grep -v 'grep' | awk -F' ' '{print $2}' | xargs kill"
+        -------------------------------------------------
+
+
+

@@ -1,0 +1,4 @@
+com/big/data/call/collect/Kafka2HBaseConsumer.class
+com/big/data/call/collect/HBaseDao.class
+com/big/data/call/collect/HBaseUtil.class
+com/big/data/call/collect/HBaseCoprocessor.class

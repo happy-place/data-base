@@ -1,0 +1,33 @@
+package com.big.data.test.test4_sortedPhoneFlow;
+
+import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Reducer;
+
+import java.io.IOException;
+
+public class OneStepSumReducer extends
+        Reducer<Text, FlowSortedBean, FlowSortedBean, NullWritable> {
+
+    private FlowSortedBean v = new FlowSortedBean();
+
+    @Override
+    protected void reduce(Text key, Iterable<FlowSortedBean> iter, Context context)
+            throws IOException, InterruptedException {
+
+        long sumUpflow = 0;
+        long sumDowmflow = 0;
+
+        for (FlowSortedBean flowBean : iter) {
+            sumUpflow += flowBean.getUpflow();
+            sumDowmflow += flowBean.getDownflow();
+        }
+
+        v.set(key.toString(), sumUpflow, sumDowmflow);
+
+        context.write(v, NullWritable.get());
+
+    }
+
+}
+         

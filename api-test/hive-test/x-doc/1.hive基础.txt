@@ -1,0 +1,259 @@
+复习：
+	* 检查Linux配置
+		1、防火墙关闭
+		2、/etc/hosts的IP映射
+		3、/etc/hostname 主机名
+		4、ntp时间服务器
+		5、网卡信息配置
+	* 检查HDFS\检查YARN\检查MR
+		export JAVA_HOME
+			hadoop.env.sh
+			yarn-env.sh
+			mapred-env.sh
+
+		core-site.xml
+			<configuration>
+				<property>
+					<name>fs.defaultFS</name>
+					<value>hdfs://hadoop-senior01.itguigu.com:8020</value>
+				</property>
+
+				<property>
+					<name>hadoop.tmp.dir</name>
+					<value>/opt/modules/cdh/hadoop-2.5.0-cdh5.3.6/data</value>
+				</property>
+			</configuration>
+
+		hdfs-site.xml
+			<configuration>
+				<!-- 指定数据冗余份数 -->
+				<property>
+					<name>dfs.replication</name>
+					<value>3</value>
+				</property>
+
+				<!-- 关闭权限检查-->
+				<property>
+					<name>dfs.permissions.enable</name>
+					<value>false</value>
+				</property>
+
+				<property>
+					<name>dfs.namenode.secondary.http-address</name>
+					<value>hadoop-senior03.itguigu.com:50090</value>
+				</property>
+
+				<property>
+					<name>dfs.namenode.http-address</name>
+					<value>hadoop-senior01.itguigu.com:50070</value>
+				</property>
+
+				<property>
+					<name>dfs.webhdfs.enabled</name>
+					<value>true</value>
+				</property>
+			</configuration>
+
+		yarn-site.xml
+			<configuration>
+				<!-- Site specific YARN configuration properties -->
+				<property>
+					<name>yarn.nodemanager.aux-services</name>
+					<value>mapreduce_shuffle</value>
+				</property>
+
+				<property>
+					<name>yarn.resourcemanager.hostname</name>
+					<value>hadoop-senior02.itguigu.com</value>
+				</property>
+
+				<property>
+					<name>yarn.log-aggregation-enable</name>
+					<value>true</value>
+				</property>
+
+				<property>
+					<name>yarn.log-aggregation.retain-seconds</name>
+					<value>86400</value>
+				</property>
+
+				<!-- 任务历史服务 -->
+    			<property>
+        			<name>yarn.log.server.url</name>
+        			<value>http://hadoop-senior01.itguigu.com:19888/jobhistory/logs/</value>
+    			</property>
+			</configuration>
+
+		mapred-site.xml
+			<configuration>
+				<property>
+        			<name>mapreduce.framework.name</name>
+        			<value>yarn</value>
+    			</property>
+
+    			<property>
+        			<name>mapreduce.jobhistory.adress</name>
+        			<value>hadoop-senior01.itguigu.com:10020</value>
+    			</property>
+
+    			<property>
+        			<name>mapreduce.jobhistory.webapp.adress</name>
+        			<value>hadoop-senior01.itguigu.com:19888</value>
+    			</property>
+
+			</configuration>
+		slaves
+			hadoop-senior01.itguigu.com
+			hadoop-senior02.itguigu.com
+			hadoop-senior03.itguigu.com
+	* 检查Maven
+		 1、$ tar -zxf /opt/softwares/apache-maven-3.0.5-bin.tar.gz -C /opt/modules/
+		 2、配置MAVEN_HOME
+		 	#MAVEN_HOME
+			MAVEN_HOME=/opt/modules/apache-maven-3.0.5
+			export PATH=$PATH:$MAVEN_HOME/bin
+	* 检查离线仓库
+		1、创建maven默认的离线仓库文件夹.m2
+			$ mkdir ~/.m2/
+		2、解压离线仓库到默认位置
+			$ tar -zxf /opt/softwares/hbase+hadoop_repository.tar.gz -C ~/.m2/
+	* 检查Eclipse
+		1、解压安装Eclipse
+			$ tar -zxf /opt/softwares/eclipse-jee-kepler-SR1-linux-gtk-x86_64.tar.gz -C /opt/modules/
+		2、配置MAVEN选项
+			window - preferences - maven - installtions - add - filesystem - 找到你的maven安装路径
+	* 如何创建Maven项目
+		1、file - new - maven project - quickstart
+		2、pom.xml
+			<dependency>
+      			<groupId>org.apache.hadoop</groupId>
+      			<artifactId>hadoop-client</artifactId>
+      			<version>2.5.0</version>
+    		</dependency>
+    	3、创建resource文件夹
+    		右键项目 - new - source folder - src/main/resourece
+	* 一键启动/关闭脚本的编写
+		HDFS
+			$ /opt/modules/cdh/hadoop-2.5.0-cdh5.3.6/sbin/hadoop-daemon.sh start namenode
+			$ /opt/modules/cdh/hadoop-2.5.0-cdh5.3.6/sbin/hadoop-daemon.sh start datanode
+			$ /opt/modules/cdh/hadoop-2.5.0-cdh5.3.6/sbin/hadoop-daemon.sh start secondarynamenode
+		YARN
+			$ /opt/modules/cdh/hadoop-2.5.0-cdh5.3.6/sbin/yarn-daemon.sh start resourcemanager
+			$ /opt/modules/cdh/hadoop-2.5.0-cdh5.3.6/sbin/yarn-daemon.sh start nodemanager
+		HistoryServer
+			$ /opt/modules/cdh/hadoop-2.5.0-cdh5.3.6/sbin/mr-jobhistory-daemon.sh start historyserver
+			有shell
+				粗放来讲，你手动使用CRT登录某个Linux系统时，是有shell的
+			无shell
+				当你使用ssh访问某个系统的时候，是无shell的
+感性认知：
+	* 数据库与数据仓库
+		数据库：
+			mysql、oracle、sqlserver、DB2、sqlite、MDB
+		数据仓库：
+			Hive，是MR的客户端，也就是说不必要每台机器都安装部署Hive
+	* 本质是什么？
+理性认知：
+	* Hive的特性
+		1、操作接口是采用SQL语法，HQL
+		2、避免了写MapReduce的繁琐过程
+	* Hive体系结构
+		1、Client
+			** 终端命令行
+			** JDBC -- 不常用，非常麻烦（相对于前者）
+		2、metastore
+			** 原本的数据集和字段名称以及数据信息之间的双射关系。
+			** 我们目前是存储在Mysql中
+		3、Server-Hadoop
+			** 在操作Hive的同时，需要将Hadoop的HDFS开启，YARN开启，MAPRED配置好
+	* Hive的部署与安装
+		1、解压Hive到安装目录
+			$ tar -zxf /opt/softwares/hive-0.13.1-cdh5.3.6.tar.gz -C ./
+		2、重命名配置文件
+			$ mv hive-default.xml.template hive-site.xml
+			$ mv hive-env.sh.template hive-env.sh
+		3、hive-env.sh
+			JAVA_HOME=/opt/modules/jdk1.8.0_121
+			HADOOP_HOME=/opt/modules/cdh/hadoop-2.5.0-cdh5.3.6/
+			export HIVE_CONF_DIR=/opt/modules/cdh/hive-0.13.1-cdh5.3.6/conf
+		4、安装Mysql
+			$ su - root
+			# yum -y install mysql mysql-server mysql-devel
+			# wget http://dev.mysql.com/get/mysql-community-release-el7-5.noarch.rpm
+			# rpm -ivh mysql-community-release-el7-5.noarch.rpm
+			# yum -y install mysql-community-server
+			尖叫提示：如果使用离线绿色版本（免安装版本）需要手动初始化Mysql数据库
+		5、配置Mysql
+			** 开启Mysql服务
+				# systemctl start mysqld.service
+			** 设置root用户密码
+				# mysqladmin -uroot password '123456'
+			** 为用户以及其他机器节点授权
+				mysql > grant all on *.* to root@'hadoop-senior01.itguigu.com' identified by '123456';
+				grant：授权
+				all：所有权限
+				*.*：数据库名称.表名称
+				root：操作mysql的用户
+				@''：主机名
+				密码：123456
+			** hive-site.xml
+				<property>
+  					<name>javax.jdo.option.ConnectionURL</name>
+  					<value>jdbc:mysql://hadoop-senior01.itguigu.com:3306/metastore?createDatabaseIfNotExist=true</value>
+  					<description>JDBC connect string for a JDBC metastore</description>
+				</property>
+
+				<property>
+  					<name>javax.jdo.option.ConnectionDriverName</name>
+  					<value>com.mysql.jdbc.Driver</value>
+  					<description>Driver class name for a JDBC metastore</description>
+				</property>
+
+				<property>
+  					<name>javax.jdo.option.ConnectionUserName</name>
+  					<value>root</value>
+  					<description>username to use against metastore database</description>
+				</property>
+
+				<property>
+  					<name>javax.jdo.option.ConnectionPassword</name>
+  					<value>123456</value>
+  					<description>password to use against metastore database</description>
+				</property>
+
+			** hive-log4j.properties
+				hive.log.dir=/opt/modules/cdh/hive-0.13.1-cdh5.3.6/logs
+			** 拷贝数据库驱动包到Hive根目录下的lib文件夹
+				$ cp -a mysql-connector-java-5.1.27-bin.jar /opt/modules/cdh/hive-0.13.1-cdh5.3.6/lib/
+			** 启动Hive
+				$ bin/hive
+			** 修改HDFS系统中关于Hive的一些目录权限
+				$ /opt/modules/cdh/hadoop-2.5.0-cdh5.3.6/bin/hadoop fs -chmod 777 /tmp/
+				$ /opt/modules/cdh/hadoop-2.5.0-cdh5.3.6/bin/hadoop fs -chmod 777 /user/hive/warehouse
+			** 显示数据库名称以及字段名称
+				<!-- 是否在当前客户端中显示查询出来的数据的字段名称 -->
+				<property>
+  					<name>hive.cli.print.header</name>
+  					<value>true</value>
+  					<description>Whether to print the names of the columns in query output.</description>
+				</property>
+
+				<!-- 是否在当前客户端中显示当前所在数据库名称 -->
+				<property>
+  					<name>hive.cli.print.current.db</name>
+  					<value>true</value>
+  					<description>Whether to include the current database in the Hive prompt.</description>
+				</property>
+
+				第一次需要执行初始化命令 schematool -dbType mysql -initSchema
+
+                查看初始化后信息  schematool -dbType mysql -info
+
+			** 创建数据库
+				hive> create database staff;
+			** 创建表操作
+				hive> create table t1(eid int, name string, sex string) row format delimited fields terminated by '\t';
+			** 导入数据
+				*** 从本地导入
+					load data local inpath '文件路径' into table;
+				*** 从HDFS系统导入

@@ -1,0 +1,8 @@
+<!-- 先定义宏(函数)，然后引用宏-->
+<h2>test_import</h2>
+{% import 'macros.html' as macros %}
+<ul>
+    {% for comment in comments %}
+        {{ macros.render_comment(comment) }}
+    {% endfor %}
+</ul>

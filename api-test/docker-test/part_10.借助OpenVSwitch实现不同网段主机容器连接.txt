@@ -1,0 +1,261 @@
+0.借助Open vSwitch 实现跨主机容器连接原理
+
+                              GateWay 172.16.32.0
+                                ↑            ↑
+                          Host_1              Host_2
+                           obr0 → gre0 x gre0 ← obr0
+                             ↑      ↑    ↑      ↑
+              192.168.1.0   br0 → route route   br0    192.168.2.0
+                             ↑                   ↑
+                          docker              docker
+                            container_1  container_1
+
+    通过 br0 + obr0 容器可直接访问到对方容器所在宿主机
+    通过 容器与容器间跨网段互访还需要借助宿主机上创建的路由表实现。
+
+    特点，实现宿主机与运行容器ip解耦，和跨网段ip互访。
+
+    # 停止网桥
+    ip link set dev br0 down
+    # 删除网桥
+    brctl delbr br0
+
+1.Open vSwitch
+    高质量，多层虚拟交换机，使用Apache2.0许可协议，通过C代码实现，其使用场景在于让大规模网络自动化通过编程方式实现，同时支持众多标准的管理接口和协议。
+
+2.GRE隧道
+    使用通用路由协议封装的隧道技术，满足网络基础设施间通过网络传输数据需求。使用隧道协议传递的数据(或负载) 可以是不同协议的数据帧或包。
+    隧道协议可以将其他协议的数据帧或包进行重新封装然后通过隧道发送出去。新的帧头提供路由信息，以便通过网络传递被封装的数据。
+
+   隧道协议提供的是点对点的数据传输技术。
+
+3.环境
+    宿主机环境
+        HOST1 IP 172.16.32.100 GATEWAY 172.16.32.2
+        HOST2 IP 172.16.32.101 GATEWAY 172.16.32.2
+
+    gre远程ip绑定
+        HOST1 gre0 ... "options:remote_ip=172.16.32.101"
+        HOST2 gre0 ... "options:remote_ip=172.16.32.100"
+
+    宿主机br0网桥
+        HOST1 br0 ... "192.168.1.0 netmask 255.255.255.0"
+        HOST2 br0 ... "192.168.2.0 netmask 255.255.255.0"
+
+    宿主机容器跨网段互通路由表
+        HOST1 ip route ... "192.168.2.0/24 via 172.16.32.101"
+        HOST2 ip route ... "192.168.1.0/24 via 172.16.32.100"
+
+4.宿主机安装 openvsiwtch 服务
+    HOST1
+        yum install -y openvswitch
+
+        service openvswitch start  (chkconfig openvswitch on 开启启动)
+
+        # 查看 床架你的 openswitch 网桥
+        ovs-vsctl show
+        bf29b8f5-9f82-4e99-9a5e-aa99ec4e4841
+        ovs_version: "2.0.0"
+
+        # 创建openswitch网桥
+        ovs-vsctl add-br obr0
+
+        # 绑定网桥接口
+        ovs-vsctl add-port obr0 gre0
+
+        # 配置网桥 绑定远程主机ip
+        ovs-vsctl set interface gre0 type=gre options:remote_ip=172.16.32.101
+
+        ovs-vsctl show
+        bf29b8f5-9f82-4e99-9a5e-aa99ec4e4841
+            Bridge "obr0"
+                Port "obr0"
+                    Interface "obr0"
+                        type: internal
+                Port "gre0"
+                    Interface "gre0"
+                        type: gre
+                        options: {remote_ip="172.16.32.101"}  <<<<
+            ovs_version: "2.0.0"
+
+        # 创建本地网桥 br0
+        brctl addbr br0
+
+        # 配置本地网桥 ip 绑定 192.168.1.0 网段
+        ifconfig br0 192.168.1.0 netmask=255.255.255.0
+
+        # 查看网桥配置
+        brctl show
+        bridge name     bridge id               STP enabled     interfaces
+        br0             8000.26c1de8aba44       no
+        virbr0          8000.5254004b6bc6       yes             virbr0-nic
+
+        # 在本地网桥绑定 openswitch网桥接口
+        brctl addif br0 obr0
+
+        brctl show
+        bridge name     bridge id               STP enabled     interfaces
+        br0             8000.26c1de8aba44       no              obr0       <<<< obr0 与 br0 绑定成功
+        docker0         8000.024278ffdcd7       no
+        virbr0          8000.5254004b6bc6       yes             virbr0-nic
+
+        # 配置docker 守护进程绑定的网卡
+        vim /etc/sysconfig/docker
+        --------------------------------
+        ...
+        OPTIONS='--label name=test_options1 -H tcp://0.0.0.0:2375 -H unix:///var/run/docker.sock -b=br0'
+        ...                                                                                       ^^^^^
+        --------------------------------
+
+        # 重启docker
+        service docker restart
+
+        ps -ef | grep docker
+        root       3127      1  0 02:10 ?        00:00:04 ... -b=br0 --storage-driver overlay2
+
+        docker run -it --name b1 docker.io/ubuntu:14.04
+
+        docker attach b1
+        root@43f157ba1f40:/# ifconfig
+        eth0      Link encap:Ethernet  HWaddr 02:42:c0:a8:01:02
+                  inet addr:192.168.1.2  Bcast:0.0.0.0  Mask:255.255.255.0   <<<< 容器已经使用了 br0 网段ip
+
+        # 测试 172.16.32.100 主机运行容器与 172.16.32.101 主机的联通性
+        root@43f157ba1f40:/# ping 172.16.32.101
+        PING 172.16.32.101 (172.16.32.100) 56(84) bytes of data.
+        64 bytes from 172.16.32.101: icmp_seq=1 ttl=63 time=0.692 ms
+        64 bytes from 172.16.32.101: icmp_seq=2 ttl=63 time=0.477 ms
+
+
+    HOST2
+        yum install -y openvswitch
+
+        service openvswitch start  (chkconfig openvswitch on 开启启动)
+
+        # 查看 床架你的 openswitch 网桥
+        ovs-vsctl show
+        bf29b8f5-9f82-4e99-9a5e-aa99ec4e4841
+        ovs_version: "2.0.0"
+
+        # 创建openswitch网桥
+        ovs-vsctl add-br obr0
+
+        # 绑定网桥接口
+        ovs-vsctl add-port obr0 gre0
+
+        # 配置网桥 绑定远程主机ip
+        ovs-vsctl set interface gre0 type=gre options:remote_ip=172.16.32.100
+
+        ovs-vsctl show
+        bf29b8f5-9f82-4e99-9a5e-aa99ec4e4841
+            Bridge "obr0"
+                Port "obr0"
+                    Interface "obr0"
+                        type: internal
+                Port "gre0"
+                    Interface "gre0"
+                        type: gre
+                        options: {remote_ip="172.16.32.100"}  <<<<
+            ovs_version: "2.0.0"
+
+        # 创建本地网桥 br0
+        brctl addbr br0
+
+        # 配置本地网桥 ip 绑定 192.168.2.0 网段
+        ifconfig br0 192.168.2.0 netmask=255.255.255.0
+
+        # 查看网桥配置
+        brctl show
+        bridge name     bridge id               STP enabled     interfaces
+        br0             8000.26c1de8aba44       no
+        virbr0          8000.5254004b6bc6       yes             virbr0-nic
+
+        # 在本地网桥绑定 openswitch网桥接口
+        brctl addif br0 obr0
+
+        brctl show
+        bridge name     bridge id               STP enabled     interfaces
+        br0             8000.26c1de8aba44       no              obr0       <<<< obr0 与 br0 绑定成功
+        docker0         8000.024278ffdcd7       no
+        virbr0          8000.5254004b6bc6       yes             virbr0-nic
+
+        # 配置docker 守护进程绑定的网卡
+        vim /etc/sysconfig/docker
+        --------------------------------
+        ...
+        OPTIONS='--label name=test_options1 -H tcp://0.0.0.0:2375 -H unix:///var/run/docker.sock -b=br0'
+        ...                                                                                       ^^^^^
+        --------------------------------
+
+        # 重启docker
+        service docker restart
+
+        ps -ef | grep docker
+        root       3127      1  0 02:10 ?        00:00:04 ... -b=br0 --storage-driver overlay2
+
+        docker run -it --name b1 docker.io/ubuntu:14.04
+
+        docker attach b1
+        root@43f157ba1f40:/# ifconfig
+        eth0      Link encap:Ethernet  HWaddr 02:42:c0:a8:01:02
+                  inet addr:192.168.2.2  Bcast:0.0.0.0  Mask:255.255.255.0   <<<< 容器已经使用了 br0 网段ip
+
+        # 测试 172.16.32.101 主机运行容器与 172.16.32.100 主机的联通性
+        root@43f157ba1f40:/# ping 172.16.32.100
+        PING 172.16.32.100 (172.16.32.100) 56(84) bytes of data.
+        64 bytes from 172.16.32.100: icmp_seq=1 ttl=63 time=0.692 ms
+        64 bytes from 172.16.32.100: icmp_seq=2 ttl=63 time=0.477 ms
+
+        # 未添加路由条件下访问对方主机上容器
+        root@43f157ba1f40:/# ping 192.168.1.2  (Unreachable 无法联通)
+
+        # 添加ip路由表(从本机[172.16.32.101] 访问192.168.1.xx 网段ip，重定向查找172.16.32.100)  route del -net 192.168.1.0 netmask 255.255.255.0 删除路由表
+        ip route add 192.168.1.0/24 via 172.16.32.100
+
+        [root@localhost ~]# route
+        Kernel IP routing table
+        Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+        default         gateway         0.0.0.0         UG    100    0        0 ens33
+        172.16.32.0     0.0.0.0         255.255.255.0   U     100    0        0 ens33
+        172.17.0.0      0.0.0.0         255.255.0.0     U     0      0        0 docker0
+        192.168.1.0     172.16.32.100   255.255.255.0   UG    0      0        0 ens33    <<<<
+        192.168.2.0     0.0.0.0         255.255.255.0   U     0      0        0 br0
+        192.168.122.0   0.0.0.0         255.255.255.0   U     0      0        0 virbr0
+
+        # 宿主机访问对方容器
+        [root@localhost ~]# ping 192.168.1.2
+        PING 192.168.1.2 (192.168.1.2) 56(84) bytes of data.
+        64 bytes from 192.168.1.2: icmp_seq=1 ttl=62 time=2.48 ms
+        64 bytes from 192.168.1.2: icmp_seq=2 ttl=62 time=0.768 ms
+
+        # 宿主机间容器互访
+        root@ce0c03b37878:/# ping 192.168.1.2
+        PING 192.168.1.2 (192.168.1.2) 56(84) bytes of data.
+        64 bytes from 192.168.1.2: icmp_seq=1 ttl=62 time=2.48 ms
+        64 bytes from 192.168.1.2: icmp_seq=2 ttl=62 time=0.768 ms
+
+        # 容器在与主机网段不同情况下访问外网
+        root@ce0c03b37878:/# ping www.baidu.com
+        PING www.a.shifen.com (61.135.169.125) 56(84) bytes of data.
+        64 bytes from 61.135.169.125: icmp_seq=1 ttl=127 time=5.92 ms
+        64 bytes from 61.135.169.125: icmp_seq=2 ttl=127 time=6.43 ms
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

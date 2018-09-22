@@ -1,0 +1,100 @@
+http://elasticsearch-cheatsheet.jolicode.com/
+
+1.# 指定 match 分词匹配，同时匹配 中华，人民 ， 共和 ，...，中华人民共和国
+GET /_search
+{
+  "query": {
+    "match": {
+      "content": "中华人民共和国"
+    }
+  }
+}
+
+# match_phrase 只会匹配 中华人民共和国 或 赶赴中华人民共和国 这类连接在一起短语
+GET /_search
+{
+  "query": {
+    "match_phrase": {
+      "content": "中华人民共和国"
+    }
+  }
+}
+
+
+2.# bool-must 过滤器，只查找 content = "hello"
+GET /_search
+{
+  "query": {
+    "bool":{
+     "must":[
+         {
+           "match_phase":{"content":"中华人民共和国"}
+         }
+       ]
+    }
+  }
+}
+
+# must_not 不得
+GET /_search
+{
+  "query": {
+    "bool":{
+     "must_not":[
+         {
+           "match_phrase":{"content":"hello"}
+         }
+       ]
+    }
+  }
+}
+
+# filter 过滤器， exists 存在指定字段
+GET /_search
+{
+  "query": {
+    "bool":{
+     "filter":[
+         {
+           "exists":{
+              "field" :"tags"
+           }
+         }
+       ]
+    }
+  }
+}
+
+# 3.多值匹配 user.* 或 title^3 中包含Elastic 字段
+POST /bank/account/_search
+{
+  "query": {
+    "multi_match": {
+      "query": "Elastic",
+      "fields": ["user.*", "title^3"],
+      "type": "best_fields"
+    }
+  }
+}
+
+# 等效于
+"bool": {
+  "must": [],
+  "must_not": [],
+  "filter": [],
+  "should": [],
+  "minimum_should_match" : 1
+}
+
+# 范围过滤
+"range": {
+  "age": {
+    "gte": 10,
+    "lte": 20,
+    "boost": 2
+  }
+}
+
+
+
+

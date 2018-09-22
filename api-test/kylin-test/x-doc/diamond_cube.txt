@@ -1,0 +1,90 @@
+运行机器：10-66-108-133
+线上目录：/data/apps/financeNeeds/finance_anchorBill4JP
+代码：finance.data.dev/anchorBill4JP/
+
+定时调度：
+0 08 * * * root cd /data/apps/financeNeeds/finance_anchorBill4JP && bash taskCore.sh -1 0 FinanceOLAP_anchorBill_area_4JP_cubeTwo_clone >> taskCore.log 2>&1
+
+
+kylin 构建 cube:
+1).从task_finance.sh 脚本看出，数据最终被插入到 finance_statistics_anchorBill4JP 分区表，说明 kylin操作很可能是基于此 hive 表构建cube的
+2).通过与前端沟通发现，其是通过 FINANCE_STATISTICS_ANCHORBILL_KYLIN_VIEW 视图 与 kylin 交互的
+仿照 FINANCE_STATISTICS_ANCHORBILL_KYLIN_VIEW，在小hive上创建 新视图 FINANCE_STATISTICS_ANCHORBILL4JP_KYLIN_VIEW (维护了粉丝团指标)
+
+CREATE VIEW `dataReport.FINANCE_STATISTICS_ANCHORBILL4JP_KYLIN_VIEW` AS select
+  `aa`.`dt`,
+  `aa`.`uid`,
+  `aa`.`country`,
+  (case when `bb`.`area` is null then "A_Other" else `bb`.`area` end) as `area`,
+  `aa`.`is_verified`,
+  `aa`.`anchor_level`,
+  `aa`.`sum_diamonds`,
+  `aa`.`total_vid_diamonds`,
+  `aa`.`guard_diamonds`,
+  `aa`.`priletter_diamonds`,
+  `aa`.`video_diamonds`,
+  `aa`.`act_diamonds`,
+  `aa`.`cheat_diamonds`,
+  `aa`.`other_diamonds`,
+  `aa`.`diamondstogold`,
+  `aa`.`withdraw`,
+  `aa`.`baggiftadddiamonds`,
+  `aa`.`battleadddiamonds`,
+  `aa`.`fensituanadddiamonds`
+  from
+  (select
+  `finance_statistics_anchorBill4JP`.`dt`,
+  `finance_statistics_anchorBill4JP`.`uid`,
+  `finance_statistics_anchorBill4JP`.`country`,
+  `finance_statistics_anchorBill4JP`.`is_verified`,
+  `finance_statistics_anchorBill4JP`.`anchor_level`,
+  `finance_statistics_anchorBill4JP`.`sum_diamonds`,
+  `finance_statistics_anchorBill4JP`.`total_vid_diamonds`,
+  `finance_statistics_anchorBill4JP`.`guard_diamonds`,
+  `finance_statistics_anchorBill4JP`.`priletter_diamonds`,
+  `finance_statistics_anchorBill4JP`.`video_diamonds`,
+  `finance_statistics_anchorBill4JP`.`act_diamonds`,
+  `finance_statistics_anchorBill4JP`.`cheat_diamonds`,
+  `finance_statistics_anchorBill4JP`.`other_diamonds`,
+  `finance_statistics_anchorBill4JP`.`diamondstogold`,
+  `finance_statistics_anchorBill4JP`.`withdraw`,
+  `finance_statistics_anchorBill4JP`.`baggiftadddiamonds`,
+  `finance_statistics_anchorBill4JP`.`battleadddiamonds`,
+  `finance_statistics_anchorBill4JP`.`fensituanadddiamonds`
+  from `datareport`.`finance_statistics_anchorBill4JP`) as `aa`
+  left join
+  (select `country_area`.`country`,`country_area`.`area` from `datareport`.`country_area`) as `bb`
+  on `aa`.`country`=`bb`.`country`;
+
+
+3).kylin单节点 旧平台 http://34.233.205.66:7070/kylin/query#query_content_results [ADMIN/ADMIN] 登录
+》》【加载视图】Insight 加载新建视图 FINANCE_STATISTICS_ANCHORBILL4JP_KYLIN_VIEW 到 FianceOLAP 空间
+》》【基于视图创建Model】通过观察发现 原版  FinanceOLAP_anchorBill_area (Model) 就是基于 FINANCE_STATISTICS_ANCHORBILL_KYLIN_VIEW 视图创建，
+        模仿创建新版本 Model -> FinanceOLAP_anchorBill_area_4JP
+》》【基于Model创建cube】通过观察发现 原版 FinanceOLAP_anchorBill_area_cubeOne (Cube) 基于 FinanceOLAP_anchorBill_area 模型构建
+        模仿创建新版 Cube -> FinanceOLAP_anchorBill_area_4JP_cubeOne
+        Advanced Setting 业需要注意，Rowkeys 列，尽管Column被锁死，但可拖动ID列，配置先后顺序，过滤性强的列优先靠前排，rowkey的设计，直接影响查询效率
+》》【首次构建】通过观察发现 FinanceOLAP_anchorBill_area_cubeOne 都是在 2018-08-03 08:29:13 GMT+8 完成构建，构建时间段 设置为  2018-08-02 08:00:00 GMT+8 ~ 2018-08-03 08:00:00 GMT+8
+        因此需要考虑时区问题，统一按 东八区 08:00:00 GMT+8 ~ 08:00:00 GMT+8  构建cube ,且在 8点后进行构建；
+》》【补救】FinanceOLAP_anchorBill_area_4JP_cubeOne 构建时间段设置成 00:00:00 GMT+8 ~ 00:00:00 GMT+8，以后会自动按 0点顺延，不能修改，只能基于  FinanceOLAP_anchorBill_area_4JP_cubeOne
+        克隆创建 FinanceOLAP_anchorBill_area_4JP_cubeTwo_clone ，重新设置构建时间点  08:00:00 GMT+8 ~ 08:00:00 GMT+8 ，重新构建
+》》【废弃】Insight 执行 select * from FINANCE_STATISTICS_ANCHORBILL4JP_KYLIN_VIEW where dt='20180101' limti 10; 发现还是从 FinanceOLAP_anchorBill_area_cubeOne 取数据，
+        Model 业执行 Diable操作，废弃  FinanceOLAP_anchorBill_area_4JP_cubeOne ，再次查询，发现能够正常从 FinanceOLAP_anchorBill_area_4JP_cubeTwo_clone 取数据。
+
+删除 cube
+curl -X DELETE -H "Content-Type:application/json;charset=UTF-8" -H "Authorization: Basic TU9ERUxFUjpNT0RFTEVS" http://10.66.202.39:7070/kylin/api/cubes/FinanceOLAP_anchorBill_area_4JP_cubeTwo_clone/segs/20180816000000_20180817000000
+
+注： 只有之前已经成功构建过的才能执行删除 或 refresh 操作，构建失败， 且已经跨天的，会报 overlap 异常。可以通过Disable -> Pruge -> Enable -> Build 重新选定一个较长时间段，重新构建。
+
+构建cube
+curl -X PUT -H "Authorization: Basic TU9ERUxFUjpNT0RFTEVS" -H "Content-Type: application/json" -d '{"startTime":"'"${startTimeMill}"'","endTime":"'"${endTimeMill}"'","buildType":"BUILD"}' http://10.66.202.39:7070/kylin/api/cubes/${cubeName}/build
+
+
+注：中间某天Build失败，需要到Monitor去 discard 相应的job(不是drop) ,然后返回Model 重新构建,默认7日小合并，24日大合并，如果数据已经合并，需要refresh刷新。
+
+
+
+
+
+
+

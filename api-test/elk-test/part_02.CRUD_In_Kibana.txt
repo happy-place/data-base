@@ -1,0 +1,573 @@
+1.# 查看全部数据
+GET _search
+{
+  "query": {
+    "match_all": {}
+  }
+}
+
+2.# 手动插入单条记录
+PUT /blog/ariticle/1
+{
+"title":"New version of Elasticsearch released!",
+"content":"Version 1.0 released today!",
+"tags":["announce","elasticsearch","release"]
+}
+
+3.# 查找单条记录
+GET /blog/ariticle/1
+----------------------------------------------------------------
+{
+  "_index": "blog",
+  "_type": "ariticle",
+  "_id": "1",    <<< 指定 id
+  "_version": 1,
+  "found": true,
+  "_source": {
+    "title": "New version of Elasticsearch released!",
+    "content": "Version 1.0 released today!",
+    "tags": [
+      "announce",
+      "elasticsearch",
+      "release"
+    ]
+  }
+}
+----------------------------------------------------------------
+
+4.# 匹配查找 select * from blog.ariticle where content=1.0;
+GET /blog/ariticle/_search?pretty&q=content:1.0
+# 或
+GET /blog/ariticle/_search?q=content:1.0
+# 或 post 请求
+POST /blog/ariticle/_search
+----------------------------------------------------------------
+{
+  "query": {
+    "term": {
+      "content": {
+        "value": "1.0"
+      }
+    }
+  }
+}
+
+{
+  "took": 9,
+  "timed_out": false,
+  "_shards": {
+    "total": 5,
+    "successful": 5,
+    "skipped": 0,
+    "failed": 0
+  },
+  "hits": {
+    "total": 1,
+    "max_score": 0.2876821,
+    "hits": [
+      {
+        "_index": "blog",
+        "_type": "ariticle",
+        "_id": "1",
+        "_score": 0.2876821,
+        "_source": {
+          "title": "New version of Elasticsearch released!",
+          "content": "Version 1.0 released today!",
+          "tags": [
+            "announce",
+            "elasticsearch",
+            "release"
+          ]
+        }
+      }
+    ]
+  }
+}
+----------------------------------------------------------------
+
+5.# or 匹配 （参照2插入多条记录）
+POST /blog/ariticle/_search
+{
+  "query": {
+    "terms": {
+      "_id": ["1","3","5"]
+    }
+  }
+}
+----------------------------------------------------------------
+{
+  "took": 14,
+  "timed_out": false,
+  "_shards": {
+    "total": 5,
+    "successful": 5,
+    "skipped": 0,
+    "failed": 0
+  },
+  "hits": {
+    "total": 2,
+    "max_score": 1,
+    "hits": [
+      {
+        "_index": "blog",
+        "_type": "ariticle",
+        "_id": "1",
+        "_score": 1,
+        "_source": {
+          "title": "New version of Elasticsearch released!",
+          "content": "Version 1.0 released today!",
+          "tags": [
+            "announce",
+            "elasticsearch",
+            "release"
+          ]
+        }
+      },
+      {
+        "_index": "blog",
+        "_type": "ariticle",
+        "_id": "3",
+        "_score": 1,
+        "_source": {
+          "title": "New version of Elasticsearch released!",
+          "content": "Version 2.0 released today!",
+          "tags": [
+            "announce",
+            "elasticsearch",
+            "release"
+          ]
+        }
+      }
+    ]
+  }
+}
+----------------------------------------------------------------
+
+6.# 更新 update blog.ariticle set content="new version 2.0 20160714" where _id = 1;
+# 指定id 更新
+POST /blog/ariticle/1/_update
+{
+  "script": "ctx._source.content = \"new version 2.0 20160714\""
+}
+----------------------------------------------------------------
+{
+  "_index": "blog",
+  "_type": "ariticle",
+  "_id": "1",
+  "_version": 2,
+  "result": "updated",   <<< 成功更新
+  "_shards": {
+    "total": 2,
+    "successful": 1,
+    "failed": 0
+  },
+  "_seq_no": 2,
+  "_primary_term": 1
+}
+----------------------------------------------------------------
+
+# 查询修改 基于 _id 之外字段查询更新 (inline 在新版已被替换为 source)
+POST /blog/ariticle/_update_by_query
+{
+  "script":{
+    "inline":"ctx._source.tags=[\"aa\",\"bb\",\"cc\"]"  # 注 新版 api 使用 source 代替 inline 执行
+  },
+  "query":{
+    "match":{
+      "content":"hello"
+    }
+  }
+}
+
+----------------------------------------------------------------
+{
+  "took": 90,
+  "timed_out": false,
+  "total": 1,
+  "updated": 1,
+  "deleted": 0,
+  "batches": 1,
+  "version_conflicts": 0,
+  "noops": 0,
+  "retries": {
+    "bulk": 0,
+    "search": 0
+  },
+  "throttled_millis": 0,
+  "requests_per_second": -1,
+  "throttled_until_millis": 0,
+  "failures": []
+}
+----------------------------------------------------------------
+
+注： 类型与如下自增操作也可执行
+POST /twitter/_update_by_query
+{
+  "script": {
+    "inline": "ctx._source.likes++"
+  },
+  "query": {
+    "term": {
+      "user": "kimchy"
+    }
+  }
+}
+
+
+注：脚本更新，需要开启如下设置
+vim elasticsearch_win\config\elasticsearch.yml
+---------------------------------------------
+script.groovy.sandbox.enabled: true
+script.engine.groovy.inline.search: on
+script.engine.groovy.inline.update: on
+script.inline: on
+script.indexed: on
+script.engine.groovy.inline.aggs: on
+index.mapper.dynamic: true
+---------------------------------------------
+
+7.# 删除指定 _id 记录
+DELETE /blog/ariticle/1
+----------------------------------------------------------------
+{
+  "_index": "blog",
+  "_type": "ariticle",
+  "_id": "1",
+  "_version": 4,
+  "result": "deleted",
+  "_shards": {
+    "total": 2,
+    "successful": 1,
+    "failed": 0
+  },
+  "_seq_no": 3,
+  "_primary_term": 1
+}
+----------------------------------------------------------------
+
+
+8.# 查询删除
+POST /blog/ariticle/_delete_by_query
+{
+  "query": {
+    "match": {
+      "title": "New version of Elasticsearch released!"
+    }
+  }
+}
+----------------------------------------------------------------
+{
+  "took": 26,
+  "timed_out": false,
+  "total": 1,
+  "deleted": 1,
+  "batches": 1,
+  "version_conflicts": 0,
+  "noops": 0,
+  "retries": {
+    "bulk": 0,
+    "search": 0
+  },
+  "throttled_millis": 0,
+  "requests_per_second": -1,
+  "throttled_until_millis": 0,
+  "failures": []
+}
+----------------------------------------------------------------
+
+8.注册索引 pattern
+Kibana > Management > Elasticsearch (Index Management) 查看全部索引
+Kibana > Management > Kibana (Index Patterns) > Create Index Pattern 添加正则匹配模式
+    blog* 在 Discover 栏可成功匹配 blog blog1 blog-1
+
+9.Discover 基于字段模糊查询
+    直接在搜索框输入 任意字段 value 即可线下
+    http://127.0.0.1:5601/app/kibana#/discover?_g=()&_a=(columns:!(_source),index:'00422370-ba4e-11e8-bd45-bbb76115679f',interval:auto,query:(language:lucene,query:New),sort:!(_score,desc))
+
+
+10.kibana 语法参照
+http://elasticsearch-cheatsheet.jolicode.com
+
+11.Postman 批量插入测试数据
+http://127.0.0.1:9200/bank/account/_bulk?pretty
+数据：http://pan.baidu.com/s/1pJvOlbP
+样例
+  {
+        "_index": "bank",
+        "_type": "account",
+        "_id": "183",
+        "_score": 1,
+        "_source": {
+          "account_number": 183,
+          "balance": 14223,
+          "firstname": "Hudson",
+          "lastname": "English",
+          "age": 26,
+          "gender": "F",
+          "address": "823 Herkimer Place",
+          "employer": "Xinware",
+          "email": "hudsonenglish@xinware.com",
+          "city": "Robbins",
+          "state": "ND"
+        }
+  },
+
+12.查看集群全部索引
+GET /_cat/indices?v
+health status index   uuid                   pri rep docs.count docs.deleted store.size pri.store.size
+yellow open   blog    nE9y7uwoSTO1lulw3XjcQg   5   1          1            0      5.9kb          5.9kb
+green  open   .kibana 88nHgfxMRUuDCWHy6Q4sng   1   0          2            0      9.8kb          9.8kb
+yellow open   bank    EhDCGUYvSR2MP08OUGDO0Q   5   1       1000            0    474.8kb        474.8kb
+
+13.查看指定index的 mapping 映射信息
+GET /bank/_mapping
+----------------------------------------------------------------
+{
+  "bank": {
+    "mappings": {
+      "account": {
+        "properties": {
+          "account_number": {
+            "type": "long"
+          },
+          "address": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "age": {
+            "type": "long"
+          },
+          "balance": {
+            "type": "long"
+          },
+          "city": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "email": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "employer": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "firstname": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "gender": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "lastname": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "state": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+----------------------------------------------------------------
+
+14.# 查看全部index配置
+GET /_all
+
+15.# firstname = Aurelia 或 Ratliff 并且 gender=
+GET /bank/account/_search?q=firstname:(Aurelia OR Ratliff) AND gender:"M"
+
+16.# exisits OR
+GET /_search?q=_exists_:title OR title:singl? noneOrAnyChar*cter
+GET /_search?q=title:elastichurch~3 AND date:[2016-01-01 TO 2018-12-31]
+
+17.# content = elastic AND (title:lucene OR title:solr)
+GET /_search
+{
+  "query": {
+    "query_string": {
+      "default_field": "content",
+      "query": "elastic AND (title:lucene OR title:solr)"
+    }
+  }
+}
+
+18.# 手动插入索引
+PUT /my_index_name
+{
+  "settings": {
+    "number_of_replicas": 1, # 副本数
+    "number_of_shards": 3,   # 分片数
+    "analysis": {},
+    "refresh_interval": "1s" # 更新频率
+  },
+  "mappings": {
+    "my_type_name": {
+      "properties": {
+        "title": {
+          "type": "text",        # 执行分词操作
+          "analyzer": "english"  # 英语分词器
+        }
+      }
+    }
+  }
+}
+
+# 给index 添加 type, 从ES6开始，index 下只支持一个type
+PUT /my_index_name/_mapping/my_type_name
+{
+  "my_type_name": {
+    "properties": {
+      "tag": {
+        "type": "keyword"
+      }
+    }
+  }
+}
+
+19.# 单纯配置index
+PUT /my_index_name/_settings
+{
+  "index": {
+    "refresh_interval": "-1",
+    "number_of_replicas": 0
+  }
+}
+
+20.# 查看映射和配置
+GET /my_index_name/_mapping
+GET /my_index_name/_settings
+
+21.# 插入Doc，自动分配ID
+POST /my_index_name/my_type_name
+{
+  "title": "Elastic is funny",
+  "tag": [
+    "lucene"
+  ]
+}
+
+# 指定插入ID
+PUT /my_index_name/my_type_name/12abc
+{
+  "title": "Elastic is funny",
+  "tag": [
+    "lucene"
+  ]
+}
+
+22.# 基于ID删除
+DELETE /my_index_name/my_type_name/12abc
+
+23.# 索引下线 与 开启 (关闭状态不可查询)
+POST /my_index_name/_close
+POST /my_index_name/_open
+
+24.# 移出 与 添加索引
+POST /_aliases
+{
+  "actions": [
+    {
+      "remove": {
+        "index": "my_index_name",
+        "alias": "foo"
+      }
+    },
+    {
+      "add": {
+        "index": "my_index_name",
+        "alias": "bar",
+        "filter" : { "term" : { "user" : "damien" } }
+      }
+    }
+  ]
+}
+
+GET /_aliases
+GET /my_index_name/_alias/*
+GET /*/_alias/*
+GET /*/_alias/foo
+
+# 配置分词器
+PUT /english_example
+{
+  "settings": {
+    "analysis": {
+      "filter": {
+        "english_stop": {
+          "type":       "stop",
+          "stopwords":  "_english_"
+        },
+        "english_stemmer": {
+          "type":       "stemmer",
+          "language":   "english"
+        }
+      },
+      "analyzer": {
+        "my_english": {
+          "char_filter":  ["html_strip"],
+          "tokenizer":  "standard",
+          "filter": [
+            "lowercase",
+            "english_stop",
+            "english_stemmer"
+          ]
+        }
+      }
+    }
+  }
+}
+
+25.# 管理命令
+GET /my_index_name/_stats
+GET /my_index_name/_stats
+GET /my_index_name/_segments
+GET /my_index_name/_recovery?pretty&human
+POST /my_index_name/_cache/clear
+POST /my_index_name/_refresh
+POST /my_index_name/_flush
+POST /my_index_name/_forcemerge

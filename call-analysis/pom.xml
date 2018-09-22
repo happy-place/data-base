@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.big.data</groupId>
+    <artifactId>call-analysis</artifactId>
+    <packaging>pom</packaging>
+    <version>1.0-SNAPSHOT</version>
+    <modules>
+        <module>call-common</module>
+        <module>call-mocker</module>
+        <module>call-collector</module>
+        <module>call-mapreducer</module>
+        <!--<module>call-website</module>-->
+    </modules>
+
+    <!-- 构建格式 -->
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <hbase.version>0.98.6-cdh5.3.6</hbase.version>
+        <kafka.version>0.8.2.1</kafka.version>
+        <hadoop.version>2.5.0-cdh5.3.6</hadoop.version>
+        <hadoop-core.version>2.5.0-mr1-cdh5.3.6</hadoop-core.version>
+        <!--<hadoop-client.version>2.7.2</hadoop-client.version>-->
+        <hive-exec.version>0.13.1-cdh5.3.6</hive-exec.version>
+        <mysql-connector.version>5.1.39</mysql-connector.version>
+        <c3p0.version>0.9.5.2</c3p0.version>
+        <commons-logging.version>1.1.3</commons-logging.version>
+        <servlet-api.version>4.0.0</servlet-api.version>
+        <commons.version>2.2</commons.version>
+
+        <fastjson.version>1.2.41</fastjson.version>
+        <spark.version>2.1.1</spark.version>
+        <spark.streaming.kafka.version>1.6.3</spark.streaming.kafka.version>
+        <jedis.version>2.9.0</jedis.version>
+        <scala.version>2.11.8</scala.version>
+        <log4j.version>1.2.17</log4j.version>
+        <slf4j.version>1.7.22</slf4j.version>
+        <junit.version>4.11</junit.version>
+        <jdk.version>1.8</jdk.version>
+        <mvn.compile.version>3.6.1</mvn.compile.version>
+        <scala.mvn.version>3.2.2</scala.mvn.version>
+        <mvn.assembly.version>3.0.0</mvn.assembly.version>
+        <scala.version>2.11.8</scala.version>
+        <log4j-core.version>2.8.2</log4j-core.version>
+        <maven-surefire-plugin.version>2.12.4</maven-surefire-plugin.version>
+    </properties>
+
+    <!-- 下载仓库地址 -->
+    <repositories>
+        <repository>
+            <id>cloudera</id>
+            <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
+        </repository>
+
+        <repository>
+            <id>centor</id>
+            <url>http://central.maven.org/maven2/</url>
+        </repository>
+    </repositories>
+
+    <!--&lt;!&ndash; 声明并引入公有的依赖 &ndash;&gt;-->
+    <dependencies>
+        <!--json 模块-->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>fastjson</artifactId>
+            <version>${fastjson.version}</version>
+        </dependency>
+        <!--json 模块-->
+        <!-- 所有子项目的日志框架 -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>jcl-over-slf4j</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+        <!-- 具体的日志实现 -->
+        <dependency>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+            <version>${log4j.version}</version>
+        </dependency>
+        <!-- Logging End -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <version>${log4j-core.version}</version>
+        </dependency>
+
+        <!--<dependency>-->
+            <!--<groupId>org.scala-lang</groupId>-->
+            <!--<artifactId>scala-library</artifactId>-->
+            <!--<version>${scala.version}</version>-->
+        <!--</dependency>-->
+
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>${junit.version}</version>
+            <!--<scope>test</scope>-->
+        </dependency>
+
+    </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.apache.hbase</groupId>
+                <artifactId>hbase-client</artifactId>
+                <version>${hbase.version}</version>
+                <!--<scope>provided</scope>-->
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hbase</groupId>
+                <artifactId>hbase-server</artifactId>
+                <version>${hbase.version}</version>
+                <!--<scope>provided</scope>-->
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hbase</groupId>
+                <artifactId>hbase-common</artifactId>
+                <version>${hbase.version}</version>
+                <!--<scope>provided</scope>-->
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>kafka_2.10</artifactId>
+                <version>${kafka.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-client</artifactId>
+                <version>${hadoop.version}</version>
+                <!--<scope>provided</scope>-->
+            </dependency>
+
+            <!--<dependency>-->
+                <!--<groupId>org.apache.hive</groupId>-->
+                <!--<artifactId>hive-exec</artifactId>-->
+                <!--<version>${hive-exec.version}</version>-->
+                <!--&lt;!&ndash;<scope>provided</scope>&ndash;&gt;-->
+            <!--</dependency>-->
+
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-common</artifactId>
+                <version>${hadoop.version}</version>
+                <!--<scope>provided</scope>-->
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
+                <version>${hadoop.version}</version>
+                <!--<scope>provided</scope>-->
+            </dependency>
+
+            <dependency>
+                <groupId>mysql</groupId>
+                <artifactId>mysql-connector-java</artifactId>
+                <version>${mysql-connector.version}</version>
+                <!--<scope>provided</scope>-->
+
+            </dependency>
+
+            <dependency>
+                <groupId>com.mchange</groupId>
+                <artifactId>c3p0</artifactId>
+                <version>${c3p0.version}</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>commons-logging</groupId>
+                <artifactId>commons-logging</artifactId>
+                <version>${commons-logging.version}</version>
+                <!--<scope>provided</scope>-->
+            </dependency>
+
+            <dependency>
+                <groupId>javax.servlet</groupId>
+                <artifactId>javax.servlet-api</artifactId>
+                <version>${servlet-api.version}</version>
+                <!--<scope>provided</scope>-->
+            </dependency>
+
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <!-- 编译插件 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${mvn.compile.version}</version>
+                <configuration>
+                    <source>${jdk.version}</source>
+                    <target>${jdk.version}</target>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${maven-surefire-plugin.version}</version>
+                <configuration>
+                    <skipTests>true</skipTests>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+    
+</project>

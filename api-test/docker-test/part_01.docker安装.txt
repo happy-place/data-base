@@ -1,0 +1,38 @@
+1.Mac 推荐安装可视化版本
+    由于 mac 版本 nsenter 无法使用，所有学习过程推荐到虚拟机中。
+
+2.Centos7 安装docker
+    1.安装Centos7虚拟机(安装过程注意及时配置管理员)
+    2.网络
+      ifconfig 查了现有ip,取前三位 xxx.xxx.xxx.2 作为新ip的网关，关闭全部ipv6设置
+      参考：
+      PROTO="static"
+      NETMASK="255.255.255.0"
+      GATEWAY="xxx.xxx.xxx.2"
+      IPADDR="xxx.xxx.xxx.100"
+      DNS1="114.114.114.114"
+      DNS2="8.8.8.8"
+
+      # 重启网络
+      service network restart
+      ping www.baidu.com
+
+      # vim /etc/sudoers 添加sudo免密设置
+
+    3.安装docker
+      sudo yum install docker-io
+
+      # 关闭selinux，否则无法启动
+      vim /etc/sysconfig/docker
+      OPTIONS='--selinux-enabled=false --log-driver=journald --signature-verification=false'
+                                 ^^^^
+
+    4.启动docker
+       service docker start
+       ps -ef | grep docker
+
+    5.宿主机配置映射 (宿主机通过hosts 访问虚拟机，虚拟机通过端口映射，访问容器)
+     vim /etc/hosts
+
+
+

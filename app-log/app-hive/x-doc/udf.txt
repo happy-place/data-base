@@ -1,0 +1,6 @@
+添加 额外jars
+vim $HIVE_HOME/conf/hive-env.sh
+---------------------------------
+export HIVE_AUX_JARS_PATH=/Users/huhao/software/hive-1.2.2/extlib
+---------------------------------
+

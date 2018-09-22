@@ -1,0 +1,308 @@
+查询每个部门的最高薪资：
+SELECT
+deptno, MAX(sal)
+FROM
+emp
+GROUP BY
+deptno;
+
+查询显示员工姓名，员工编号，部门名称
+SELECT
+e.ename,
+e.empno,
+d.dname
+FROM
+emp e JOIN dept d ON e.deptno = d.deptno
+
+按照部门进行薪资的排位
+SELECT
+empno,
+ename,
+sal,
+deptno,
+ROW_NUMBER() OVER(PARTITION BY deptno ORDER BY sal DESC) rank
+FROM
+emp;
+
+按照部门进行薪资排位，只显示前两名
+SELECT
+	temp.empno,
+	temp.ename,
+	temp.sal,
+	temp.deptno
+FROM(
+	SELECT
+		empno,
+		ename,
+		sal,
+		deptno,
+		ROW_NUMBER() OVER(PARTITION BY deptno ORDER BY sal DESC) rank
+	FROM
+			emp) temp
+WHERE
+temp.rank <= 2
+
+统计某个网站某天的所有PV数据
+格式：
+
+2015-08-28	35000
+
+SELECT
+	temp.date,
+	COUNT(temp.url) pv
+FROM(
+	SELECT
+	SUBSTRING(trackTime, 0, 10) date,
+	url
+	FROM
+	db_web_data.track_log
+WHERE
+	LENGTH(url) > 0) temp
+GROUP BY
+	temp.date;
+
+统计某个网站某天的所有UV数据
+格式：
+2015-08-28	35000  12000
+SELECT
+	temp.date,
+	COUNT(temp.url) pv,
+	COUNT(DISTINCT temp.guid) uv
+	FROM(
+	SELECT
+		SUBSTRING(trackTime, 0, 10) date,
+		url,
+		guid
+	FROM
+		db_web_data.track_log
+	WHERE
+	length(url) > 0) temp
+GROUP BY
+temp.date;
+
+
+CASE案例
+将总收入显示出来：
+select ename, case when comm is null then 0 + sal else comm + sal end from emp;
+显示收入评级：
+select ename, case when sal < 1000 then "lower" when sal >= 1000 and sal <= 2000 then "mid" else "high" end from db_hive_demo.emp;
+
+select ename, case when sal < 1000 then deptno when sal >= 1000 and sal <= 2000 then comm else "UNKNOWN" end from db_hive_demo.emp;
+
+
+load data local inpath "${hiveconf:LOADFILE_NEW}"
+into table db_web_log.track_log
+partition(date='${hiveconf:DATE_NEW}', hour='${hiveconf:HOUR_NEW}');
+
+create table if not exists db_web_log.track_log(
+id              string,
+
+url            string,
+
+referer        string,
+
+keyword        string,
+
+type            string,
+
+guid            string,
+
+pageId          string,
+
+moduleId        string,
+
+linkId          string,
+
+attachedInfo    string,
+
+sessionId      string,
+
+trackerU        string,
+
+trackerType    string,
+
+ip              string,
+
+trackerSrc      string,
+
+cookie          string,
+
+orderCode      string,
+
+trackTime      string,
+
+endUserId      string,
+
+firstLink      string,
+
+sessionViewNo  string,
+
+productId      string,
+
+curMerchantId  string,
+
+provinceId      string,
+
+cityId          string,
+
+fee            string,
+
+edmActivity    string,
+
+edmEmail        string,
+
+edmJobId        string,
+
+ieVersion      string,
+
+platform        string,
+
+internalKeyword string,
+
+resultSum      string,
+
+currentPage    string,
+
+linkPosition    string,
+
+buttonPosition  string
+
+)
+partitioned by (date string,hour string)
+row format delimited fields terminated by '\t';
+
+insert overwrite local directory "/home/admin/result/order" row format delimited fields terminated by "\t" select * from emp order by empno;
+
+insert overwrite local directory "/home/admin/result/sort" row format delimited fields terminated by "\t" select * from emp distribute by deptno sort by empno;
+
+	session_id			会话id				sessionId
+				guid				访客id				guid
+				trackerU			访问去掉id，获取	trackerU
+									会话中的第一个
+				landing_url			着陆URL				url
+				landing_url_ref		着落之前的URL		referer
+				user_id				会员id				endUserId
+				pv
+				uv
+				stay_time			停留时间			trackTime
+				min_trackTime		最小时间
+				ip
+				provinceId			省份id				provinceId
+* 网站分析项目：
+Step1、
+create table if not exists db_web_ana.session_info(
+session_id string,
+guid string,
+tracker_u string,
+landing_url string,
+landing_url_ref string,
+user_id string,
+pv string,
+stay_time string,
+min_tracktime string,
+ip string,
+province_id string)
+partitioned by (date string)
+row format delimited fields terminated by '\t';
+
+Step2、
+create table if not exists db_web_ana.session_info_temp1(
+session_id string,
+guid string,
+user_id string,
+pv string,
+stay_time string,
+min_tracktime string,
+ip string,
+province_id string
+)
+row format delimited fields terminated by '\t';
+
+Step3、
+insert overwrite table db_web_ana.session_info_temp1
+select
+sessionId,
+max(guid),
+max(endUserId),
+count(url),
+max(unix_timestamp(trackTime)) - min(unix_timestamp(trackTime)),
+from_unixtime(min(unix_timestamp(trackTime))),
+max(ip),
+max(provinceId)
+from db_web_data.track_log where date='20150828'
+group by
+sessionId;
+
+Step4、
+create table db_web_ana.session_info_temp2(
+session_id string,
+tracktime string,
+tracker_u string,
+landing_url string,
+landing_url_ref string
+)
+row format delimited fields terminated by '\t';
+
+Step5、
+insert overwrite table db_web_ana.session_info_temp2
+select
+sessionId,
+trackTime,
+trackerU,
+url,
+referer
+from db_web_data.track_log where date='20150828';
+
+Step6、
+insert overwrite table db_web_ana.session_info partition(date='20150828')
+select
+p1.session_id,
+p1.guid,
+p2.tracker_u,
+p2.landing_url,
+p2.landing_url_ref,
+p1.user_id,
+p1.pv,
+p1.stay_time,
+p1.min_tracktime,
+p1.ip,
+p1.province_id
+from db_web_ana.session_info_temp1 p1 join db_web_ana.session_info_temp2 p2
+on p1.session_id=p2.session_id and p1.min_tracktime=p2.tracktime;
+
+执行系列操作：
+$ bin/hive -f hql/web_ana/create_session_info.hql ;bin/hive -f hql/web_ana/create_session_info_temp1.hql ;bin/hive -f hql/web_ana/create_session_info_temp2.hql ;bin/hive -f hql/web_ana/insert_session_info_temp1.hql ;bin/hive -f hql/web_ana/insert_session_info_temp2.hql ;bin/hive -f hql/web_ana/insert_join_session_info.hql
+
+Step7、日期	UV       	PV 		登录人数 		游客人数 	平均访问时长 	二跳率 	独立IP
+create table db_web_ana.result_info(
+date string,
+uv string,
+pv string,
+login_users string,
+visit_users string,
+avg_time string,
+sec_hop string,
+ip_count string
+)
+row format delimited fields terminated by '\t';
+
+Step8、日期	UV       	PV 		登录人数 		游客人数 	平均访问时长 	二跳率 	独立IP
+insert overwrite table db_web_ana.result_info
+select
+date,
+count(distinct guid),
+sum(pv),
+count(case when user_id != '' then user_id else null end),
+count(case when user_id = '' then user_id else null end),
+avg(stay_time),
+count(distinct (case when pv >= 2 then guid else null end))/count(distinct guid),
+count(distinct ip)
+from db_web_ana.session_info where date='20150828'
+group by
+date;
+
+Step9、验证结果
+日期		UV      PV 			登录人数 	游客人数 	平均访问时长 		二跳率 				独立IP
+20150828	38985	131668.0	18548		21902		750.7895179233622	0.5166089521610876	29668
+
+

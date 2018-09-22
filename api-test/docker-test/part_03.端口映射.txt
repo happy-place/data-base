@@ -1,0 +1,54 @@
+1.查看docker网卡
+    brctl show查看网卡(docker启动，都会创建一个类似于 docker0  的网桥，每启动一个容器，就对应在docker0上注册一个接口vethb45d22b )
+    [root@localhost ~]# brctl show
+    bridge name     bridge id               STP enabled     interfaces
+    docker0         8000.0242d53e2979       no              vethb45d22b
+    virbr0          8000.5254004b6bc6       yes             virbr0-nic
+
+   [root@localhost docker-test]# ip ro li
+   default via 172.16.32.2 dev ens33  proto static  metric 100
+   172.16.32.0/24 dev ens33  proto kernel  scope link  src 172.16.32.100  metric 100
+   172.17.0.0/16 dev docker0  proto kernel  scope link  src 172.17.0.1  <<<<
+   192.168.122.0/24 dev virbr0  proto kernel  scope link  src 192.168.122.1
+   [root@localhost docker-test]#
+
+
+2.随机端口映射（能有效防止端口冲突）
+    -P 随机端口映射
+    -d 后台运行
+    --name 容器名称
+    [root@localhost docker-test]# docker run -P -d --name mynginx1 nginx
+
+    # 将容器的 80 端口映射到主机 32769 端口
+    [root@localhost docker-test]# docker ps -l
+    CONTAINER ID        IMAGE               COMMAND                  CREATED             STATUS              PORTS                   NAMES
+    d1f0a45e8cd5        nginx               "nginx -g 'daemon ..."   21 minutes ago      Up 21 minutes       0.0.0.0:32769->80/tcp   mynginx1
+
+    # 成功访问到nginx服务
+    http://docker-01:32769
+
+    # 使用容器id停机
+    [root@localhost docker-test]# docker stop d1f0a45e8cd5
+    d1f0a45e8cd5
+
+
+3.指定端口映射
+    -d 后台运行容器
+    -p port1:port2  (指定容器的port2映射到主机的port1)
+    --name 容器名称
+    [root@localhost docker-test]# docker run -d -p 80:80 --name mynginx2 nginx
+    ab0b838eb1fffa47100ad7d61d373d4223af3348afcb871f3f79a10a4fd4b375
+
+    [root@localhost docker-test]# docker ps -l
+    CONTAINER ID        IMAGE               COMMAND                  CREATED             STATUS              PORTS                NAMES
+    ab0b838eb1ff        nginx               "nginx -g 'daemon ..."   7 seconds ago       Up 6 seconds        0.0.0.0:80->80/tcp   mynginx2
+
+    [root@localhost docker-test]# curl http://127.0.0.1:80/
+    <!DOCTYPE html>
+
+    其余网络映射
+    -p hostPort:containerPort 指定容器端口映射到主机指定端口
+    -p ip:hostPost:containerPort 指定容器端口映射到指定主机ip指定端口
+    -p ip:containerPort 指定容器端口映射到指定主机ip
+    -p
+

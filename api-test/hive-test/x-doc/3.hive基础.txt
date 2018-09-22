@@ -1,0 +1,203 @@
+Hive框架基础（三）
+	理性认知：
+		* Hive创建表的方式
+			1、使用create命令创建一个新表
+				例如：create table if not exists db_web_data.track_log(字段)
+				partitioned by (date string,hour string)
+				row format delimited fields terminated by '\t';
+			2、把一张表的某些字段抽取出来，创建成一张新表
+				例如：create table backup_track_log as select * from db_web_data.track_log;
+				尖叫提示：会复制属性以及属性值到新的表中
+			3、复制表结构
+				例如：create table like_track_log like db_web_data.track_log;
+				尖叫提示：不会复制属性值，只会复制表结构。
+		* Hive表导入数据方式
+			1、本地导入
+				load data local inpath 'local_path/file' into table 表名称 ;
+			2、HDFS导入
+				load data inpath 'hdfs_path/file' into table 表名称 ;
+			3、覆盖导入
+				load data local inpath 'path/file' overwrite into table 表名称 ;
+				load data inpath 'path/file' overwrite into table 表名称 ;
+			4、查询导入
+				create table track_log_bak as select * from db_web_data.track_log;
+			5、insert导入
+				** 追加-append-默认方式
+					insert into table 表名 select * from track_log;
+				** 覆盖-overwrite-显示指定-使用频率高
+					insert overwrite table 表名 select * from track_log;
+		* Hive表导出数据方式
+			1、本地导出
+				例如：insert overwrite local directory "/home/admin/Desktop/1/2" row format delimited fields terminated by '\t' select * from db_hive_demo.emp ;
+				尖叫提示：会递归创建目录
+			2、HDFS导出
+				例如：insert overwrite diretory "path/" select * from staff;
+			3、Bash shell覆盖追加导出
+				例如：$ bin/hive -e "select * from staff;"  > /home/z/backup.log
+			4、Sqoop
+		* Hive数据清洗之思路
+			需求：实现按照省份和日期统计PV和UV
+				SELECT date, provinceId, count(url) pv, count(distinct guid) uv from track_log group by date, provinceId;
+				见代码
+		* Hive自动化处理日志
+			需求：网站产生的日志会按照某个日期分类的文件夹存储，定期分析该日志，产出结果
+				/opt/modules/weblog
+					-20170724(文件夹)
+						-2017072418（日志文件）
+						-2017072419
+					-20170725
+						-2017072518（日志文件）
+						-2017072619
+				见脚本
+		* Hive中的几种排序
+			order by
+				全局排序，就一个Reduce
+			sort by
+				相当于对每一个Reduce内部的数据进行排序，不是全局排序。
+			distribute by
+				类似于MRpartition， 进行分区，一般要结合sort by使用。
+			cluster by
+				当distribute和sort字段相同时，就是cluster by
+			案例见：HQL案例.txt
+		* 业务案例梳理
+			需求：执行周期性任务，每天的晚上6点，执行自动化脚本，
+			加载昨天的日志文件到HDFS，
+			同时分析网站的多维数据（PV,UV按照省份和小时数进行分类查询）
+			最后将查询的结果，存储在一张临时表中（表字段：date，hour，provinceId，pv，uv）存储在HIVE中，并且
+			将该临时表中的所有数据，存储到MySQL中，以供第二天后台开发人员的调用，展示。
+			1、定时加载本地数据到HDFS，涉及到：auto.sh，crontab
+			2、清洗数据，打包jar，定时执行，
+				/user/hive/warehouse/db_web_data.db/track_log/date=20150828/hour=18
+				part-000001
+				/user/hive/warehouse/db_web_data.db/track_log/date=20150828/hour=19
+				part-000001
+			3、建表track_log，必须建立分区，临时指定清洗好的数据作为仓库源
+				alter table track_log add partition(date='20150828',hour='18') location
+				"/user/hive/warehouse/db_web_data.db/track_log/date=20150828/hour=18";
+				alter table track_log add partition(date='20150828',hour='18') location
+				"/user/hive/warehouse/db_web_data.db/track_log/date=20150828/hour=19";
+			4、开始分析想要的数据，将结果存储在Hive的临时表中
+				创建临时表：
+					create table if not exists temp_track_log(date string, hour string, provinceId string, pv string, uv string)
+					row format delimited fields terminated by '\t';
+				向临时表中插入数据：
+					insert overwrite table temp_track_log select date, hour, provinceId, count(url) pv, count(distinct guid) uv
+					from track_log where date='20150828' group by date, hour, provinceId;
+			5、使用自定义的JAR，导入本地导出的文件到MYsql或者使用Sqoop。
+		* Sqoop
+			一、SQL-TO-HADOOP
+			二、配置：
+				1、开启Zookeeper
+				2、开启集群服务
+				3、配置文件：
+					** sqoop-env.sh
+					#export HADOOP_COMMON_HOME=
+					export HADOOP_COMMON_HOME=/opt/modules/cdh/hadoop-2.5.0-cdh5.3.6/
+
+					#Set path to where hadoop-*-core.jar is available
+					#export HADOOP_MAPRED_HOME=
+					export HADOOP_MAPRED_HOME=/opt/modules/cdh/hadoop-2.5.0-cdh5.3.6/
+
+					#set the path to where bin/hbase is available
+					#export HBASE_HOME=
+
+					#Set the path to where bin/hive is available
+					#export HIVE_HOME=
+					export HIVE_HOME=/opt/modules/cdh/hive-0.13.1-cdh5.3.6/
+
+					#Set the path for where zookeper config dir is
+					#export ZOOCFGDIR=
+					export ZOOCFGDIR=/opt/modules/cdh/zookeeper-3.4.5-cdh5.3.6/
+					export ZOOKEEPER_HOME=/opt/modules/cdh/zookeeper-3.4.5-cdh5.3.6/
+
+				4、拷贝jdbc驱动到sqoop的lib目录下
+					cp -a mysql-connector-java-5.1.27-bin.jar /opt/modules/cdh/sqoop-1.4.5-cdh5.3.6/lib/
+				5、启动sqoop
+					$ bin/sqoop help查看帮助
+				6、测试Sqoop是否能够连接成功
+					$ bin/sqoop list-databases --connect jdbc:mysql://hadoop-senior01.itguigu.com:3306/metastore
+					--username root \
+					--password 123456
+			三、案例
+				1、使用sqoop将mysql中的数据导入到HDFS
+					Step1、确定Mysql服务的正常开启
+					Step2、在Mysql中创建一张表
+						mysql> create database company;
+						mysql> create table staff(
+							id int(4) primary key not null auto_increment,
+							name varchar(255) not null,
+							sex varchar(255) not null);
+						mysql> insert into staff(name, sex) values('Thomas', 'Male');
+					Step3、操作数据
+
+					RDBMS --> HDFS
+					使用Sqoop导入数据到HDFS
+						** 全部导入
+							$ bin/sqoop import \
+							--connect jdbc:mysql://hadoop-senior01.itguigu.com:3306/company \
+							--username root \
+							--password 123456 \
+							--table staff \
+							--target-dir /user/company \
+							--delete-target-dir \
+							--num-mappers 1 \
+							--fields-terminated-by "\t"
+						** 查询导入
+							 $ bin/sqoop import
+							 --connect jdbc:mysql://hadoop-senior01.itguigu.com:3306/company
+							 --username root
+							 --password 123456
+							 --target-dir /user/company
+							 --delete-target-dir
+							 --num-mappers 1
+							 --fields-terminated-by "\t"
+							 --query 'select name,sex from staff where id >= 2 and $CONDITIONS;'
+						** 导入指定列
+							$ bin/sqoop import
+							 --connect jdbc:mysql://hadoop-senior01.itguigu.com:3306/company
+							 --username root
+							 --password 123456
+							 --target-dir /user/company
+							 --delete-target-dir
+							 --num-mappers 1
+							 --fields-terminated-by "\t"
+							 --columns id, sex
+							 --table staff
+						** 使用sqoop关键字筛选查询导入数据
+							$ bin/sqoop import
+							 --connect jdbc:mysql://hadoop-senior01.itguigu.com:3306/company
+							 --username root
+							 --password 123456
+							 --target-dir /user/company
+							 --delete-target-dir
+							 --num-mappers 1
+							 --fields-terminated-by "\t"
+							 --table staff
+							 --where "id=3"
+
+					RDBMS --> Hive
+						1、在Hive中创建表（不需要提前创建表，会自动创建）
+							hive (company)> create table staff_hive(id int, name string, sex string) row format delimited fields terminated by '\t';
+						2、向Hive中导入数据
+							$ bin/sqoop import
+							--connect jdbc:mysql://hadoop-senior01.itguigu.com:3306/company
+							--username root
+							--password 123456
+							--table staff
+							--num-mappers 1
+							--hive-import
+							--fields-terminated-by "\t"
+							--hive-overwrite
+							--hive-table company.staff_hive
+
+					Hive/HDFS --> MYSQL
+						1、在Mysql中创建一张表
+						$ bin/sqoop export
+						--connect jdbc:mysql://hadoop-senior01.itguigu.com:3306/company
+						--username root
+						--password 123456
+						--table staff_mysql
+						--num-mappers 1
+						--export-dir /user/hive/warehouse/company.db/staff_hive
+						--input-fields-terminated-by "\t"
+

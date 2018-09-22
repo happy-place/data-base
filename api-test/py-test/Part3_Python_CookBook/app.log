@@ -1,0 +1,9 @@
+CRITICAL:root:Host www.python.org unknown
+ERROR:root:Couldn't find 'spam'
+CRITICAL:2018-08-18 16:01:25,945:Host www.python.org unknown
+ERROR:2018-08-18 16:01:25,947:Couldn't find 'spam'
+WARNING:2018-08-18 16:01:25,948:Feature is depreciated
+WARNING:root:Feature is depreciated
+WARNING:root:Feature is depreciated
+ERROR:root:Couldn't find [1, 2, 3]
+ERROR:/Users/huhao/software/idea_proj/data-base/api-test/py-test/Part3_Python_CookBook/test_logging:Couldn't find [1, 2, 3]

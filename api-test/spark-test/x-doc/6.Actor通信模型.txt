@@ -1,0 +1,13 @@
+1.actor历史
+    spark1.3 时使用的开始 基于 Akka 的 actor 通信模型，1.6 开始引入 netty 异步通信架构，1.6之后完全抛弃了akka ，全部使用基于akka的
+异步通信架构；
+    放弃akka 原因主要有：a.不同版本akk 间存在兼容性问题；b.用户自定义的akkk 与 spark 的 akka存在冲突; c.akka 更新跟不上 spark 更新节奏
+会制约spark 的发展。
+
+2.spark 异步通信架构
+   1）每个Actor 通信端点都会起一个RpcEndpoint,服务端点，其余Actor 想与当前Actor通信，需要持有当前Actor 的 RpcEndpointRef 对象引用，相当于代理机制；
+   2) 每个RpcEndpoint 背后都挂载了一个transportServer， 用于接受其余Actor 的outbox发送过来的消息；
+   3）每个RpcEndpoint 背后也挂载了一个transportClient，用于向其他Actor 的 inbox 发送消息；
+   4）每个Actor通过 transportClient 发送出的消息，先被目标Actor 的 Dispartcher(路由器)接受后，然后交给自己outbox发出；
+   5）每个Actor通过 transportServer 接受的消息，也要先被当前Actor 的 Dispartcher 接受后，叫给其他Acctor 注册到当前Actor 的inbox中，继而加入到异步消费队列，然后被当前Actor 消费。
+   6）整个Actor 通信相当于邮局系统，是一种异步通信架构。

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.big.data.app.website.dao.StatMapper">
+    <!-- 查询新增用户 -->
+    <select id="findNewUsers" resultMap="rm_StatBean">
+        select count(*) stcount from ext_startup_logs
+    </select>
+
+    <resultMap id="rm_StatBean" type="com.big.data.app.website.domain.StatBean">
+        <result column="stcount" property="count" />
+    </resultMap>
+
+    <select id="findThisWeekNewUsers" resultMap="rm_weekUser">
+        select formattime(t.mintime,'yyyy/MM/dd') stdate , count(*) stcount
+        from (
+        select deviceid,min(createdatms) mintime
+        from ext_startup_logs
+        where appid = #{appid} group by deviceid having mintime &gt;= getweekbegin() and mintime &lt; getweekbegin(1)
+        ) t
+        group by formattime(t.mintime,'yyyy/MM/dd')
+    </select>
+    <resultMap id="rm_weekUser" type="com.big.data.app.website.domain.StatBean">
+        <result column="stcount" property="count" />
+        <result column="stdate" property="date" />
+    </resultMap>
+</mapper>

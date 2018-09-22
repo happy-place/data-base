@@ -1,0 +1,218 @@
+1.应用用场景
+    简化配置 开发生产一体化
+    提高开发效率 快速配置开发环境
+    应用隔离
+    服务整合
+    多租户使用，不同用户使用不同环境
+    代码流水线管理
+    开发调试
+    秒级别自动化扩容
+    微服务架构
+
+
+   面向产品，开发，测试，运维，自动化，微服务，大规模分布式架构(微信红包)
+
+2.docker 安装与启动
+    yum install -y docker-io
+    /etc/init.d/docker start    <<<< 调用了 ls /usr/lib/systemd/system/docker.service
+
+    mac 可视化启动
+
+3.查找镜像
+    docker search 名称 （默认官方镜像第一个）
+    huhao:~ huhao$ docker search centos
+    NAME                               DESCRIPTION                                     STARS               OFFICIAL            AUTOMATED
+    centos                             The official build of CentOS.                   4672                [OK]
+    ansible/centos7-ansible            Ansible on Centos7                              116                                     [OK]
+    jdeathe/centos-ssh                 CentOS-6 6.10 x86_64 / CentOS-7 7.5.1804 x86…   99                                      [OK]
+
+4.拉取镜像
+    docker pull centos (不带tag，默认最新)
+    huhao:~ huhao$ docker pull centos
+    Using default tag: latest
+    latest: Pulling from library/centos
+    256b176beaff: Pull complete
+    Digest: sha256:6f6d986d425aeabdc3a02cb61c02abb2e78e57357e92417d6d58332856024faf
+    Status: Downloaded newer image for centos:latest
+
+5.查看镜像
+huhao:~ huhao$ docker images
+REPOSITORY                        TAG                 IMAGE ID            CREATED             SIZE
+centos                            latest              5182e96772bf        4 weeks ago         200MB
+
+6.删除镜像
+docker rmi images-ID 或 名称
+docker rmi 5182e96772bf
+
+7.运行容器，并执行shell 命令
+基于centos创建镜像，并执行echo 'hello world'命令
+huhao:~ huhao$ docker run centos /bin/echo 'hello world'
+hello world
+
+8.查看运行过的容器
+    # 查看运行过的容器 docker ps -a
+    huhao:~ huhao$ docker ps -a
+    CONTAINER ID        IMAGE                    COMMAND                   CREATED              STATUS                          PORTS               NAMES
+    ae8984fb8b7e        centos                   "/bin/echo 'hello wo…"    About a minute ago   Exited (0) About a minute ago                       brave_kalam
+    fc97e1f573d6        sequenceiq/kylin:0.7.2   "/usr/local/serf/bin…"    8 weeks ago          Exited (137) 8 weeks ago                            amb0
+    62f3e50fd6a9        harisekhon/hbase         "/bin/sh -c \"/entryp…"   3 months ago         Exited (1) 3 months ago                             hbase1.3
+    # 查看正在运行容器(前面运行的已经退出) docker ps
+    huhao:~ huhao$ docker ps
+    CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+
+9.交互式运行容器，并命名
+    --name 命令，
+    -i -t : interactive 交互式启动伪终端tty
+    centos 本地或网络镜像，本地存在则执行，基于镜像创建容器，否则从网上拉取（每次运行只能启动一个命令，需要启动多个使用脚本）
+    huhao:~ huhao$ docker run --name mydocker -it centos /bin/bash
+    [root@5ab59b2f1354 /]# uname -a
+    Linux 5ab59b2f1354 4.9.93-linuxkit-aufs #1 SMP Wed Jun 6 16:55:56 UTC 2018 x86_64 x86_64 x86_64 GNU/Linux
+
+    # 停止容器并退出
+    [root@5ab59b2f1354 /]# Ctrl+D
+
+    # 重新启动刚床架的交互式容器
+    huhao:~ huhao$ docker start 5ab59b2f1354
+    5ab59b2f1354
+
+    # 登录容器
+    huhao:~ huhao$ docker attach 5ab59b2f1354
+    [root@5ab59b2f1354 /]# exit 或 Ctrl+D
+
+    huhao:~ huhao$ docker ps
+    CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+
+    # 再次启动交互式容器，并登入
+    huhao:~ huhao$ docker start 5ab59b2f1354
+    5ab59b2f1354
+    huhao:~ huhao$ docker attach 5ab59b2f1354
+
+    # 不关闭容器情况下退出
+    [root@5ab59b2f1354 /]# Ctr+P 和 Ctrl+Q
+
+    huhao:~ huhao$ docker ps
+    CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+    5ab59b2f1354        centos              "/bin/bash"         8 minutes ago       Up 15 seconds                           mydocker
+
+    # 关闭某正在运行容器
+    huhao:~ huhao$ docker stop 5ab59b2f1354
+    5ab59b2f1354
+
+    huhao:~ huhao$ docker ps
+    CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+
+10.从网络拉取镜像，并运行容器
+     -d 后台启动
+    huhao:~ huhao$ docker run --name mynginx nginx
+    Unable to find image 'nginx:latest' locally  <<< 本地镜像不存在
+    latest: Pulling from library/nginx <<< 转向远程仓库拉取
+    802b00ed6f79: Pull complete
+    e9d0e0ea682b: Pull complete
+    d8b7092b9221: Pull complete
+    Digest: sha256:24a0c4b4a4c0eb97a1aabb8e29f18e917d05abfe1b7a7c07857230879ce7d3d3
+    Status: Downloaded newer image for nginx:latest
+    <<< 一直阻塞在此（忘了添加 -d 守护启动参数了）
+
+    # 删除已经存在的容器，否则名称冲突
+    huhao:~ huhao$ docker container rm 49c08df084496319373c66c33c452029542dd368813b975979226382131f0feb
+    49c08df084496319373c66c33c452029542dd368813b975979226382131f0feb
+
+    # -d 后台启动
+    huhao:~ huhao$ docker run -d --name mynginx nginx
+    4057c4a697c795bb7209dd6e132c0bf87de943997776bc3bcedda0435e54f4c4
+
+    huhao:~ huhao$ docker ps
+    CONTAINER ID        IMAGE               COMMAND                  CREATED             STATUS              PORTS               NAMES
+    4057c4a697c7        nginx               "nginx -g 'daemon of…"   4 seconds ago       Up 3 seconds        80/tcp              mynginx
+    huhao:~ huhao$
+
+    # 贸然登入，又阻塞在此(启动时没有添加 -i-t 选项)
+    huhao:~ huhao$ docker attach mynginx
+    <<< Ctrl+D 退出并关闭
+
+    # 查看最后一个运行容器
+    huhao:~ huhao$ docker ps -l
+    CONTAINER ID        IMAGE               COMMAND                  CREATED             STATUS                     PORTS               NAMES
+    4057c4a697c7        nginx               "nginx -g 'daemon of…"   5 minutes ago       Exited (0) 2 minutes ago                       mynginx
+
+    # 在此启动
+    huhao:~ huhao$ docker start mynginx
+    mynginx
+
+    # 查看正在运行容器
+    CONTAINER ID        IMAGE               COMMAND                  CREATED             STATUS              PORTS               NAMES
+    4057c4a697c7        nginx               "nginx -g 'daemon of…"   18 minutes ago      Up 10 minutes       80/tcp              mynginx
+
+    # 安装 util-linux （下一步将使用到其中的nsenter）
+    huhao:~ huhao$ brew install util-linux
+
+    # 查看正在运行容器的 进程ID
+    huhao:~ huhao$ docker inspect --format "{{.State.Pid}}" mynginx
+    3068
+
+    # 通过nsenter 进入指定docker容器  (nsenter 在 yum install util-linux)
+    # 挂载命名空间 --mount --uts --ipc --net --pid
+    huhao:~ huhao$ nsenter --target 3068 --mount --uts --ipc --net --pid
+    [root@5ab59b2f1354 /]# <<< 成功登入容器
+    [root@5ab59b2f1354 /]# Ctrl+D 退出并关闭容器
+
+    # 后台启动，并打通 80 端口
+    huhao:~ huhao$ docker run -d --name mynginx -p 80:80 nginx
+    9ff489533fe3ff05af9bd512d283879ada4109789577268d42f369cf3b7a902e
+
+    huhao:~ huhao$ docker ps
+    CONTAINER ID        IMAGE               COMMAND                  CREATED             STATUS              PORTS                NAMES
+    9ff489533fe3        nginx               "nginx -g 'daemon of…"   6 seconds ago       Up 5 seconds        0.0.0.0:80->80/tcp   mynginx
+
+    huhao:~ huhao$ telnet 127.0.0.1 80
+    Trying 127.0.0.1...
+    Connected to localhost.
+    Escape character is '^]'.
+    hello
+    HTTP/1.1 400 Bad Request
+    Server: nginx/1.15.3
+    Date: Sun, 09 Sep 2018 08:56:24 GMT
+    Content-Type: text/html
+    Content-Length: 173
+    Connection: close
+
+    <html>
+    <head><title>400 Bad Request</title></head>
+    <body bgcolor="white">
+    <center><h1>400 Bad Request</h1></center>
+    <hr><center>nginx/1.15.3</center>
+    </body>
+    </html>
+    Connection closed by foreign host.
+    huhao:~ huhao$
+
+    # 浏览器访问 http://127.0.0.1:80
+
+    # nginx 配置目录
+    ls /etc/nginx/conf.d
+    default.conf
+
+11.通过脚本进入容器
+    vim in.sh
+    ------------------------------------------------------------------
+    #!/usr/bin/bash
+
+    pid=`docker inspect --format {{.State.Pid}} $1`
+
+    # 注意空格
+    if [ $pid != '' ]
+    then
+            nsenter --target $pid --mount --uts --ipc --net --pid
+    fi
+    ------------------------------------------------------------------
+
+    chmod 755 in.sh
+    ./in.sh mynginx
+
+    docker run -itd --name ip_test --network bridge --ip 192.168.200.1 --netmask 255.255.255.0 docker.io/centos /bin/bash
+
+
+
+
+
+

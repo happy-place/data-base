@@ -1,0 +1,5 @@
+2018-07-16 21:08:44,345 test_logging.py [line:34] INFO >> : start logging...
+2018-07-16 21:08:44,347 test_logging.py [line:43] INFO >> : hello
+2018-07-16 21:08:44,348 test_logging.py [line:45] WARNING >> : ok
+>> : hello
+2018-07-16 21:08:44,348 test_logging.py [line:45] WARNING >> : ok

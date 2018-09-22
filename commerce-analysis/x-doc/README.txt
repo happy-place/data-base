@@ -1,0 +1,1 @@
+注 kafka 选型必须适应 https://archive.apache.org/dist/kafka/0.10.2.1/kafka_2.11-0.10.2.1.tgz

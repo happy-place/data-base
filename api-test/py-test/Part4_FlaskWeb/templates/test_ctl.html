@@ -1,0 +1,17 @@
+<h1> test_if</h1>
+{% if user %}
+    Hello,{{ user }}
+{% else %}
+    Hello,Stranger!
+{% endif %}
+
+
+<h1>test_for</h1>
+<ul>
+    {% for comment in comments %}
+        <li>{{ comment }}</li>
+    {% endfor %}
+</ul>
+
+<h1>test_include</h1>
+{% include 'include.html' %}

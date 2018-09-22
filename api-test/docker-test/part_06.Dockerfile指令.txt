@@ -1,0 +1,488 @@
+1.注释 + 指令 = Dockerfile
+   注释，首行以"#" 开头
+   指令， 大写 FROM,MAINTAINER,RUN,EXPOSE
+
+2.FROM 指令
+    FROM repository[:tag]  必须是已经存在的基础镜像，必须是第一条非注释性指令
+
+3.MAINTAINER 指令
+    MAINTAINER <name> [contact] 作者名和联系方式
+
+4.RUN指令
+    在镜像中运行命令,每个RUN指令都会在当前镜像上次创建镜像，并运行指令，合并 RUN指令后，中间层减少了
+    RUN <command> (shell模式) 默认以 /bin/sh -c command 形式运行
+        例：RUN yum -y update
+
+    RUN ["executable","param1","param2",...] (exec模式)
+        例：RUN ["add.sh","1",2]
+
+5.EXPOSE指令
+    EXPOSE <port> [port]  指定运行服务的 多个端口
+    注：Dockerfile 中 EXPOSE 指令，只能起到声明暴露端口的目的，并不会真正打开端口，启动容器时需要使用 -p 80:80 选项构建端口映射关系。
+
+6.CMD指令
+    CMD ["executable","parmas","parmas"] (exec模式) 运行脚本 注，经测算，必须使用双引号，而不能使用单引号。
+    CMD executable parmas1 parmas2 （shell模式 命令行运行
+    CMD ["param1","param2"] (作为ENTRYPOINT指令的入参)
+
+    与 RUN 在容器构建过程只需指令不同，CMD 定义了容器构建完毕，启动阶段默认只需的命令，
+    当 docker run .. 启动时使用自定义的启动命令，CMD 定义的默认启动命令将被覆盖。
+
+7.实例
+    vim df/Dockerfile
+    ------------------------------------------
+    # First Dockerfile
+    FROM docker.io/centos:latest
+    MAINTAINER whohow20094702 "whohow20094702@163.com"
+    RUN yum -y update && rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm && yum install -y nginx
+    EXPOSE 80
+    CMD nginx -g "daemon off;"  或 CMD ["/usr/sbin/nginx","-g","daemon off;"] 或 ENTRYPOINT ["/usr/sbin/nginx","-g","daemon off;"] 不会被覆盖，启动参数将作为入参交给 ENTRYPOINT
+    ------------------------------------------
+    注：ENTRYPOINT 通常与CMD搭配使用，前者指定命令，后者指定命令参数
+    ENTRYPOINT ["/usr/sbin/nginx"]
+    CMD ["-g","daemon off;"]
+
+    cd df/
+    docker build --tag="whohow20094702/cmd-nginx" ./
+
+    docker images
+    REPOSITORY                              TAG                 IMAGE ID            CREATED             SIZE
+    whohow20094702/cmd-nginx                latest              681a02bf3249        3 minutes ago       334 MB
+    whohow20094702/nginx_01                 latest              8374d6650b07        5 hours ago         377 MB
+    docker.io/whohow20094702/centos-nginx   latest              9936d75ebac9        6 hours ago         297 MB
+    centos/nginx                            latest              09f54b752a6d        8 hours ago         297 MB
+
+    docker run -d -it -p 80:80 --name mycmd whohow20094702/cmd-nginx
+
+    curl http://127.0.0.1:80
+
+    # 不登录情况下查看容器正在运行进程
+    [root@localhost df]# docker top mycmd
+    UID                 PID                 PPID                C                   STIME               TTY                 TIME                CMD
+    root                10693               10683               0                   08:10               pts/0               00:00:00            nginx: master process /usr/sbin/nginx -g daemon off;
+    systemd+            10715               10693               0                   08:10               pts/0               00:00:00            nginx: worker process
+
+    # 启动容器时，提供了启动命令，CMD 指令将被覆盖
+    [root@localhost df]# docker run -it -p 81:80 --name mycmd6 5ada5aeb22da /bin/bash
+    [root@52c74148987f /]# ps -ef | grep nginx
+    root         14      1  0 15:18 ?        00:00:00 grep --color=auto nginx
+
+8.ENTRYPOINT 与 CMD 搭配使用
+    vim df/Dockerfile
+    ---------------------------------------------
+    # First Dockerfile
+    FROM docker.io/centos:latest
+    MAINTAINER whohow20094702 "whohow20094702@163.com"
+    RUN yum -y update && rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm && yum install -y nginx
+    EXPOSE 80
+    ENTRYPOINT ["/usr/sbin/nginx"]
+    CMD ["-g","daemon off;"]   # 此处是默认参数，还可以通过启动参数进行覆盖
+    ---------------------------------------------
+
+    cd df/
+
+    docker build --tag="whohow20094702/entrypoint4" ./
+
+    docker run -d -p 80:80 --name mypoint1 whohow20094702/entrypoint4
+
+    curl http://127.0.0.1:80/
+
+9.ENTRYPOINT 接受启动参数
+    vim df/Dockerfile
+    ---------------------------------------------
+    # First Dockerfile
+    FROM docker.io/centos:latest
+    MAINTAINER whohow20094702 "whohow20094702@163.com"
+    RUN yum -y update && rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm && yum install -y nginx
+    EXPOSE 80
+    ENTRYPOINT ["/usr/sbin/nginx"]
+    ---------------------------------------------
+
+    docker build --tag="whohow20094702/entrypoint1" ./
+
+    docker run -d -it -p 80:80 --name mypoint1 whohow20094702/entrypoint1 -g "daemon off;"
+
+    [root@localhost df]# docker ps
+    CONTAINER ID        IMAGE                        COMMAND                  CREATED             STATUS              PORTS                NAMES
+    712820b8c953        whohow20094702/entrypoint1   "/usr/sbin/nginx -..."   2 seconds ago       Up 1 second         0.0.0.0:80->80/tcp   mypoint1
+                                                                    ^^^^
+    curl http://127.0.0.1:80/
+
+10. ADD 指令
+    ADD 资源从一个位置拷贝到另一个位置，可以是构建路径的相对路径，或网络资源，与COPY 指令相比具备 tar的解压缩功能
+    ADD <src> <dest>
+    ADD ["src1","src2",..,"dest"]  适用于存在空格的路径
+
+11.COPY 指令
+    单纯拷贝资源命令推荐使用 COPY,下载网络资源 推荐使用 wget 或 curl
+    COPY <src> <src> <dest>
+    COPY ["src1","src2",..,"dest"] 适用于存在空格的路径
+
+    # 定位 centos7 nginx 主页位置
+
+    # 1).启动容器
+    [root@localhost df]# docker start 712820b8c953
+    712820b8c953
+
+    [root@localhost df]# docker ps
+    CONTAINER ID        IMAGE                        COMMAND                  CREATED             STATUS              PORTS                NAMES
+    712820b8c953        whohow20094702/entrypoint1   "/usr/sbin/nginx -..."   9 minutes ago       Up 3 seconds        0.0.0.0:80->80/tcp   mypoint1
+
+    # 查找容器运行pid
+    ot@localhost df]# docker inspect --format "{{.State.Pid}}" 712820b8c953
+    14737
+
+    # 通过nsenter 切入容器
+    [root@localhost df]# nsenter --target 14737 --mount --net --ipc --net --pid
+
+    # find 查找
+    [root@localhost /]# find / -name nginx
+    /etc/logrotate.d/nginx
+    /etc/sysconfig/nginx
+    /etc/nginx
+    /usr/lib64/nginx
+    /usr/libexec/initscripts/legacy-actions/nginx
+    /usr/sbin/nginx
+    /usr/share/nginx   <<<<
+    /var/cache/yum/x86_64/7/nginx
+    /var/cache/nginx
+    /var/lib/yum/repos/x86_64/7/nginx
+    /var/log/nginx
+
+    [root@localhost /]# ls /usr/share/nginx/html/
+    50x.html  index.html
+
+    2).编写Dockerfile使用COPY 指令替换nginx 启动页
+    vim df/index.html
+    ------------------------------------------------------------------------------------
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <title>Welcome to nginx!</title>
+    <style>
+        body {
+            width: 35em;
+            margin: 0 auto;
+            font-family: Tahoma, Verdana, Arial, sans-serif;
+        }
+    </style>
+    </head>
+    <body>
+    <h1>Welcome to nginx!</h1>
+    <p>If you see this page, the nginx web server is successfully installed and
+    working. Further configuration is required.</p>
+
+    <p>For online documentation and support please refer to
+    <a href="http://nginx.org/">nginx.org</a>.<br/>
+    Commercial support is available at
+    <a href="http://nginx.com/">nginx.com</a>.</p>
+    <h1>Hello Nginx</h1>   <!-- #### 自定义标签 ###-->
+    <p><em>Thank you for using nginx.</em></p>
+    </body>
+    </html>
+    ------------------------------------------------------------------------------------
+
+    vim df/Dockerfile
+    ------------------------------------------------------------------------------------
+    # First Dockerfile
+    FROM docker.io/centos:latest
+    MAINTAINER whohow20094702 "whohow20094702@163.com"
+    RUN yum -y update && rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm && yum install -y nginx
+    COPY index.html /usr/share/nginx/html/index.html   # <<<<< 从构架路径，拷贝到镜像路径，替换
+    EXPOSE 80
+    ENTRYPOINT ["/usr/sbin/nginx"]
+    CMD ["-g","daemon off;"]
+    ------------------------------------------------------------------------------------
+
+    docker build --tag="whohow20094702/copy1" ./
+
+    docker images
+    REPOSITORY                   TAG                 IMAGE ID            CREATED             SIZE
+    whohow20094702/copy1         latest              da688753e00c        18 minutes ago      334 MB
+
+    docker run -d -it -p 80:80 --name mycopy1 whohow20094702/copy1
+
+    curl http://127.0.0.1:80/
+
+12.VOLUME 指令
+    给镜像添加 "卷"，此操作操作可以绕过联合文件系统，添加共享文件目录。
+    VOLUMN ["data"]
+
+13.WORKDIR 指令
+    指定镜像构建RUN 或 启动命令ENTRYPOINT,CMD执行的工作目录,通常使用绝对路径，中间如果使用相对路径，会自动向下嵌套
+    WORKDIR /image/path  # 绝对路径
+
+    WORKDIR /a          # 相对路径自动向下嵌套
+    WORKDIR b
+    WORKDIR c
+    RUN pwd
+    /a/b/c
+
+14.ENV 指令
+    指定环境变量
+    ENV <key> <value>
+    ENV <key>=<value>
+
+15.USER
+    指定容器指令以何种身份运行,未指定情况下，默认以root身份运行
+    USER username|uid|group|gid
+
+    USER nginx 以 nginx用户方式运行
+    USER user USER uid USER user:group USER uid:gid USER user:gid USER uid:group
+
+16.ONBUILD [INSTRUCTION]
+    镜像触发器： 当一个镜像被当做其他镜像的基础镜像，构建过程会插入ONBUILD后面跟的插入指令
+
+    1).创建Dockerfile,将替换nginx主页操作放在 ONBUILD 指令中执行，并构建新镜像，运行容器，发现nginx主页并没有被替换
+        vim df/Dockerfile
+        --------------------------------------------------------
+        # First Dockerfile
+        FROM docker.io/centos:latest
+        MAINTAINER whohow20094702 "whohow20094702@163.com"
+        RUN yum -y update && rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm && yum install -y nginx
+        ONBUILD COPY index.html /usr/share/nginx/html/index.html   # <<<<<
+        EXPOSE 80
+        ENTRYPOINT ["/usr/sbin/nginx"]
+        CMD ["-g","daemon off;"]
+        --------------------------------------------------------
+
+        [root@localhost df]# docker build --tag="whohow20094702/onbuild1" ./
+        Sending build context to Docker daemon 3.584 kB
+        Step 1/7 : FROM docker.io/centos:latest
+         ---> 5182e96772bf
+        Step 2/7 : MAINTAINER whohow20094702 "whohow20094702@163.com"
+         ---> Using cache
+         ---> baec34523114
+        Step 3/7 : RUN yum -y update && rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm && yum install -y nginx
+         ---> Using cache
+         ---> 1d82ee840bc4
+        Step 4/7 : ONBUILD copy index.html /usr/share/nginx/html/index.html   # <<<<<< 执行的是 ONBUILD 而非 COPY
+         ---> Running in 0d4d35f75807
+         ---> 56ac4705e62b
+        Removing intermediate container 0d4d35f75807
+        Step 5/7 : EXPOSE 80
+         ---> Running in 643363545abb
+         ---> d1ad262e2506
+        Removing intermediate container 643363545abb
+        Step 6/7 : ENTRYPOINT /usr/sbin/nginx
+         ---> Running in fbfc00fefb9a
+         ---> 3eac9a91f471
+        Removing intermediate container fbfc00fefb9a
+        Step 7/7 : CMD -g daemon off;
+         ---> Running in fe93376a6386
+         ---> b9b7d2bc783d
+        Removing intermediate container fe93376a6386
+        Successfully built b9b7d2bc783d
+
+        [root@localhost df]# docker images
+        REPOSITORY                   TAG                 IMAGE ID            CREATED             SIZE
+        whohow20094702/onbuild1      latest              b9b7d2bc783d        13 seconds ago      334 MB
+        whohow20094702/copy1         latest              da688753e00c        39 minutes ago      334 MB
+
+        [root@localhost df]# docker run -d -it -p 80:80 --name mybuild1 whohow20094702/onbuild1
+        e7d418e093f6972656aa37a60ccef85960b9793e453bd539535acd75b50e1726
+
+        [root@localhost df]# docker ps
+        CONTAINER ID        IMAGE                     COMMAND                  CREATED             STATUS              PORTS                NAMES
+        e7d418e093f6        whohow20094702/onbuild1   "/usr/sbin/nginx -..."   4 seconds ago       Up 3 seconds        0.0.0.0:80->80/tcp   mybuild1
+
+        # 发现nginx 主页并没有被替换
+        [root@localhost df]# curl http://127.0.0.1:80/
+
+
+    2).以上面镜像为基础镜像，构建新镜像，构建过程发现 COPY 指令被触发执行了，运行容器，发现nginx主页被替换了
+        vim Dockerfile
+        ------------------------------------------------
+        # First Dockerfile
+        FROM whohow20094702/onbuild1:latest   # <<<<<<
+        MAINTAINER whohow20094702 "whohow20094702@163.com"
+        EXPOSE 80
+        ENTRYPOINT ["/usr/sbin/nginx"]
+        CMD ["-g","daemon off;"]
+        ------------------------------------------------
+
+        [root@localhost df]# docker build --tag="whohow20094702/onbuild2" ./
+        Step 1/5 : FROM whohow20094702/onbuild1:latest
+        # Executing 1 build trigger...   # <<<< 基础镜像的 ONBUILD 被触发了，并执行了COPY
+        Step 1/1 : COPY index.html /usr/share/nginx/html/index.html
+         ---> c945b41a1065
+        Removing intermediate container a4302c180fc4
+        Step 2/5 : MAINTAINER whohow20094702 "whohow20094702@163.com"
+         ---> Running in 5392f41d2c62
+         ---> 3660cd7f2d26
+        Removing intermediate container 5392f41d2c62
+        Step 3/5 : EXPOSE 80
+         ---> Running in fab91b85a22f
+         ---> 43aefe9c3791
+        Removing intermediate container fab91b85a22f
+        Step 4/5 : ENTRYPOINT /usr/sbin/nginx
+         ---> Running in 04597f727874
+         ---> c7ccb18b0453
+        Removing intermediate container 04597f727874
+        Step 5/5 : CMD -g daemon off;
+         ---> Running in b052c30f48fe
+         ---> 46ba493ef643
+        Removing intermediate container b052c30f48fe
+        Successfully built 46ba493ef643
+
+        [root@localhost df]# docker images
+        REPOSITORY                   TAG                 IMAGE ID            CREATED             SIZE
+        whohow20094702/onbuild2      latest              46ba493ef643        4 seconds ago       334 MB
+        whohow20094702/onbuild1      latest              b9b7d2bc783d        5 minutes ago       334 MB
+        whohow20094702/copy1         latest              da688753e00c        44 minutes ago      334 MB
+
+        root@localhost df]# docker run -d -it -p 80:80 --name mybuild2 whohow20094702/onbuild2
+        bdbda92a4e56986e51f2dea020a42713f998fea37537eb2497c36ff846906b4e
+
+        [root@localhost df]# docker ps
+        CONTAINER ID        IMAGE                     COMMAND                  CREATED             STATUS              PORTS                NAMES
+        bdbda92a4e56        whohow20094702/onbuild2   "/usr/sbin/nginx -..."   2 seconds ago       Up 1 second         0.0.0.0:80->80/tcp   mybuild2
+
+        # 发现nginx主页被替换了
+        curl http://127.0.0.1:80/
+
+17.Dockerfile 构建过程
+    FROM 指令之后运行一个基础镜像，之后每条RUN指令都会修改当前层镜像，并保存一个新镜像，全部指令执行完毕，返回一个最终镜像，并删除中间容器
+    但依旧保存了中间镜像。
+
+    1).通过中间层镜像，尝试debug构建过程
+        Sending build context to Docker daemon 3.584 kB
+        Step 1/7 : FROM docker.io/centos:latest
+         ---> 5182e96772bf
+        Step 2/7 : MAINTAINER whohow20094702 "whohow20094702@163.com"
+         ---> Running in 9298dafa607d
+         ---> 36d44447e033
+        Removing intermediate container 9298dafa607d
+        Step 3/7 : RUN yum -y update && rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm && yum install -y nginx
+         ---> Running in 486b5115ac4e
+
+        Loaded plugins: fastestmirror, ovl
+        Determining fastest mirrors
+         * base: mirror.bit.edu.cn
+         --> Running transaction check
+         ---> Package audit-libs.x86_64 0:2.8.1-3.el7 will be updated
+         ......
+         Complete!  <<<
+          ---> 5d9c9a0b1e76  << Step3 执行完毕，安装完nginx 返回新镜像 5d9c9a0b1e76
+         Removing intermediate container 486b5115ac4e  <<< 删除中间容器
+         Step 4/7 : COPY index.html /usr/share/nginx/html/index.html
+          ---> 57aebd611210  <<< Step4 构建完毕，返回新中间层镜像
+         ......
+
+        # 运行中间层镜像（安装nginx之后，copy替换之前）
+        [root@localhost df]# docker run -d -it -p 80:80 --name mycopy1 5d9c9a0b1e76 nginx -g "daemon off;"
+        2cb5828fcf36f77f944c0b529b43b97b1fd6d5b108e00002c0402daa163a8f2d
+
+        [root@localhost df]# docker ps
+        CONTAINER ID        IMAGE               COMMAND                  CREATED             STATUS              PORTS                NAMES
+        2cb5828fcf36        5d9c9a0b1e76        "nginx -g 'daemon ..."   2 seconds ago       Up 1 second         0.0.0.0:80->80/tcp   mycopy1
+
+        # 发现index页未被替换
+        curl http://127.0.0.1:80/
+
+    2).重复构建时，后面构建会将上次构建的中间层镜像当作缓存使用
+
+        [root@localhost df]# docker build --tag="whohow20094702/copy2" ./
+        Sending build context to Docker daemon 3.584 kB
+        Step 1/7 : FROM docker.io/centos:latest
+         ---> 5182e96772bf
+        Step 2/7 : MAINTAINER whohow20094702 "whohow20094702@163.com"
+         ---> Using cache   <<< 明确声明使用了上次构架你的中间层镜像作为缓存
+         ---> 36d44447e033
+        Step 3/7 : RUN yum -y update && rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm && yum install -y nginx
+         ---> Using cache
+         ---> 5d9c9a0b1e76
+        Step 4/7 : COPY index.html /usr/share/nginx/html/index.html
+         ---> Using cache
+         ---> 57aebd611210
+        Step 5/7 : EXPOSE 80
+         ---> Using cache
+         ---> 07a453cd8193
+        Step 6/7 : ENTRYPOINT /usr/sbin/nginx
+         ---> Using cache
+         ---> 40f7aeba9e71
+        Step 7/7 : CMD -g daemon off;
+         ---> Using cache
+         ---> 501c608fd355
+        Successfully built 501c608fd355
+
+
+    3).构建过程 --no-cache 选项，可以禁止使用缓存
+        root@localhost df]# docker build --tag="whohow20094702/copy3" ./ --no-cache
+        Sending build context to Docker daemon 3.584 kB
+        Step 1/7 : FROM docker.io/centos:latest
+         ---> 5182e96772bf
+        Step 2/7 : MAINTAINER whohow20094702 "whohow20094702@163.com"
+         ---> Running in c93d6194b3c8
+         ---> 59b0325e6860
+        Removing intermediate container c93d6194b3c8
+        Step 3/7 : RUN yum -y update && rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm && yum install -y nginx
+         ---> Running in 1784f7bee360
+
+        Loaded plugins: fastestmirror, ovl   <<<< 禁止使用缓存，有进入了冗长下载流程
+        Determining fastest mirrors
+         * base: mirror.bit.edu.cn
+         * extras: mirrors.huaweicloud.com
+        ....
+
+
+    4).Dockerfile文件使用 ENV REFRESH_DATE "yyyy-mm-dd" 刷新操作，阻止下面操作使用缓存
+        vim Dockerfile
+        ---------------------------------------------------------------------------
+        # First Dockerfile
+            FROM docker.io/centos:latest
+            MAINTAINER whohow20094702 "whohow20094702@163.com"
+            RUN yum -y update && rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm && yum install -y nginx
+            ENV REFRESH_DATE "2018-09-11"   # <<<< 设置环境变量，刷新缓存，前面可以使用缓存，后面，将不使用缓存
+            COPY index.html /usr/share/nginx/html/index.html
+            EXPOSE 80
+            ENTRYPOINT ["/usr/sbin/nginx"]
+            CMD ["-g","daemon off;"]
+        ---------------------------------------------------------------------------
+
+        [root@localhost df]# docker build --tag="whohow20094702/copy4" ./
+        Sending build context to Docker daemon 3.584 kB
+        Step 1/8 : FROM docker.io/centos:latest
+         ---> 5182e96772bf
+        Step 2/8 : MAINTAINER whohow20094702 "whohow20094702@163.com"
+         ---> Using cache   《《《 使用了缓存
+         ---> 59b0325e6860
+        Step 3/8 : RUN yum -y update && rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm && yum install -y nginx
+         ---> Using cache
+         ---> 9190ab34b026
+        Step 4/8 : ENV REFRESH_DATE "2018-09-11"   《《《《《 刷新缓存
+         ---> Running in f462dc2e73f5
+         ---> 8098548461cc
+        Removing intermediate container f462dc2e73f5
+        Step 5/8 : COPY index.html /usr/share/nginx/html/index.html
+         ---> ae75e54a5845   《《《 未使用缓存
+        Removing intermediate container d2d8261fdbee
+        Step 6/8 : EXPOSE 80
+         ---> Running in 6b9f022f2be4
+         ---> dafb27dafbb5
+        Removing intermediate container 6b9f022f2be4
+        Step 7/8 : ENTRYPOINT /usr/sbin/nginx
+         ---> Running in f49a9135ebbb
+         ---> d11a5b039df7
+        Removing intermediate container f49a9135ebbb
+        Step 8/8 : CMD -g daemon off;
+         ---> Running in b07f9a70e1e4
+         ---> 0589c899f587
+        Removing intermediate container b07f9a70e1e4
+        Successfully built 0589c899f587
+
+
+    5).查看构建历史 docker history image
+        [root@localhost df]# docker history whohow20094702/copy4   (堆栈追踪)
+        IMAGE               CREATED             CREATED BY                                      SIZE                COMMENT
+        0589c899f587        2 minutes ago       /bin/sh -c #(nop)  CMD ["-g" "daemon off;"]     0 B
+        d11a5b039df7        2 minutes ago       /bin/sh -c #(nop)  ENTRYPOINT ["/usr/sbin/...   0 B
+        dafb27dafbb5        3 minutes ago       /bin/sh -c #(nop)  EXPOSE 80/tcp                0 B
+        ae75e54a5845        3 minutes ago       /bin/sh -c #(nop) COPY file:6ceec9c417cc46...   636 B
+        8098548461cc        3 minutes ago       /bin/sh -c #(nop)  ENV REFRESH_DATE=2018-0...   0 B
+        9190ab34b026        6 minutes ago       /bin/sh -c yum -y update && rpm -Uvh http:...   134 MB
+        59b0325e6860        7 minutes ago       /bin/sh -c #(nop)  MAINTAINER whohow200947...   0 B
+        5182e96772bf        5 weeks ago         /bin/sh -c #(nop)  CMD ["/bin/bash"]            0 B
+        <missing>           5 weeks ago         /bin/sh -c #(nop)  LABEL org.label-schema....   0 B
+        <missing>           5 weeks ago         /bin/sh -c #(nop) ADD file:6340c690b08865d...   200 MB
+
