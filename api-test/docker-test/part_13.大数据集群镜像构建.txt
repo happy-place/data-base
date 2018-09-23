@@ -116,60 +116,87 @@
     vim /etc/profile
     ---------------------------------------------------------------------------
 
-    export BASE_DIR=/opt/softwares
+	export BASE_DIR=/opt/softwares
 
-    export JAVA_HOME=/opt/softwares/jdk1.8.0_181
+	export JAVA_HOME=$BASE_DIR/jdk1.8.0_181
 
-    export HADOOP_HOME=$BASE_DIR/hadoop-2.7.4
-    export HADOOP_COMMON_HOME=$HADOOP_HOME
-    export HADOOP_HDFS_HOME=$HADOOP_HOME
-    export HADOOP_MAPRED_HOME=$HADOOP_HOME
-    export HADOOP_YARN_HOME=$HADOOP_HOME
-    export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
-    export YARN_CONF_DIR=$HADOOP_HOME/etc/hadoop
-    export CLASSPATH=.:$HADOOP_HOME/lib:$CLASSPATH
-    export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
-    export LD_LIBRARY_PATH=$HADOOP_HOME/lib/native
-    export HADOOP_OPTS="-Djave.library.path=$HADOOP_HOME/lib"
-    export PATH=$PATH:$JAVA_HOME/bin:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
+	export HADOOP_HOME=$BASE_DIR/hadoop-2.7.4
+	export HADOOP_COMMON_HOME=$HADOOP_HOME
+	export HADOOP_HDFS_HOME=$HADOOP_HOME
+	export HADOOP_MAPRED_HOME=$HADOOP_HOME
+	export HADOOP_YARN_HOME=$HADOOP_HOME
+	export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+	export YARN_CONF_DIR=$HADOOP_HOME/etc/hadoop
+	export CLASSPATH=.:$HADOOP_HOME/lib:$CLASSPATH
+	export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
+	export LD_LIBRARY_PATH=$HADOOP_HOME/lib/native
+	export HADOOP_OPTS="-Djave.library.path=$HADOOP_HOME/lib"
+	export PATH=$PATH:$JAVA_HOME/bin:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
 
-    export FLUME_HOME=$BASE_DIR/flume-1.8.0
-    export PATH=$PATH:$FLUME_HOME/bin
+	export FLUME_HOME=$BASE_DIR/flume-1.8.0
+	export PATH=$PATH:$FLUME_HOME/bin
 
-    export KAFKA_HOME=$BASE_DIR/kafka_2.11-1.1.0
-    export PATH=$PATH:$KAFKA_HOME/bin
+	export KAFKA_HOME=$BASE_DIR/kafka_2.11-1.1.0
+	export PATH=$PATH:$KAFKA_HOME/bin
 
-    export SCALA_HOME=$BASE_DIR/scala-2.10.5
-    export PATH=${SCALA_HOME}/bin:$PATH
+	export SCALA_HOME=$BASE_DIR/scala-2.10.5
+	export PATH=${SCALA_HOME}/bin:$PATH
 
-    export SPARK_HOME=$BASE_DIR/spark-2.2.0-bin-hadoop2.7
-    export PATH="$SPARK_HOME/bin:$PATH"
+	export SPARK_HOME=$BASE_DIR/spark-2.2.0-bin-hadoop2.7
+	export PATH="$SPARK_HOME/bin:$PATH"
 
-    export HIVE_HOME=$BASE_DIR/apache-hive-2.1.1-bin
-    export HIVE_CONF_HOME=$HIVE_HOME/conf
-    export HCAT_HOME=$HIVE_HOME/hcatalog
-    export PATH=:$PATH:$HIVE_HOME/bin:$HCAT_HOME/bin
+	export HIVE_HOME=$BASE_DIR/apache-hive-2.1.1-bin
+	export HIVE_CONF_HOME=$HIVE_HOME/conf
+	export HCAT_HOME=$HIVE_HOME/hcatalog
+	export PATH=:$PATH:$HIVE_HOME/bin:$HCAT_HOME/bin
 
-    export ZOOKEEPER_HOME=$BASE_DIR/zookeeper-3.4.5-cdh5.7.0
-    export PATH=$PATH:$ZOOKEEPER_HOME/bin
+	export ZOOKEEPER_HOME=$BASE_DIR/zookeeper-3.4.5-cdh5.7.0
+	export PATH=$PATH:$ZOOKEEPER_HOME/bin
 
-    export HBASE_HOME=$BASE_DIR/hbase-1.4.0-bin
-    export PATH=$PATH:$HBASE_HOME/bin
+	export HBASE_HOME=$BASE_DIR/hbase-1.4.0-bin
+	export PATH=$PATH:$HBASE_HOME/bin
 
-    export KYLIN_HOME=$BASE_DIR/apache-kylin-2.3.2-bin
-    export KYLIN_CONF_HOME=$KYLIN_HOME/conf
-    export PATH=:$PATH:$KYLIN_HOME/bin:$CATALINE_HOME/bin
-    export tomcat_root=$KYLIN_HOME/tomcat
-    export hive_dependency=$HIVE_HOME/conf:$HIVE_HOME/lib/*:$HCAT_HOME/share/hcatalog/hive-hcatalog-core-2.1.1.jar
+	export KYLIN_HOME=$BASE_DIR/apache-kylin-2.3.2-bin
+	export KYLIN_CONF_HOME=$KYLIN_HOME/conf
+	export PATH=:$PATH:$KYLIN_HOME/bin:$CATALINE_HOME/bin
+	export tomcat_root=$KYLIN_HOME/tomcat
+	export hive_dependency=$HIVE_HOME/conf:$HIVE_HOME/lib/*:$HCAT_HOME/share/hcatalog/hive-hcatalog-core-2.1.1.jar
 
-    alias redis_on="/usr/local/bin/redis-server /etc/redis/redis.conf"
-    alias redis_cli="/usr/local/bin/redis-cli"
-    alias redis_off="/usr/local/bin/redis-cli shutdown"
+	alias sbp="source /etc/profile ~/.bash_profile ~/.bashrc"
+
+	alias redis_on="/usr/local/bin/redis-server /etc/redis/redis.conf"
+	alias redis_cli="/usr/local/bin/redis-cli"
+	alias redis_off="/usr/local/bin/redis-cli shutdown"
+
+	alias pi="hadoop jar share/hadoop/mapreduce/hadoop-mapreduce-examples-2.7.4.jar pi 10 100"
+	alias hadoop_on="$HADOOP_HOME/sbin/start-all.sh"
+	alias hadoop_off="$HADOOP_HOME/sbin/stop-all.sh"
+	alias hdfs_refresh="hdfs dfsadmin -refreshNodes"
+	alias yarn_refresh="yarn rmadmin -refreshNodes"
+	alias job_on="mr-jobhistory-daemon.sh start historyserver"
+	alias job_off="mr-jobhistory-daemon.sh stop historyserver"
+
+
+	alias mysql_on="systemctl start mariadb"
+	alias mysql_off="systemctl stop mariadb"
+
+	alias hive_init="schematool -dbType mysql -initSchema"
+
+	alias zk_on="$ZOOKEEPER_HOME/bin/zkServer.sh start"
+	alias zk_off="$ZOOKEEPER_HOME/bin/zkServer.sh stop"
+	alias zk_status="$ZOOKEEPER_HOME/bin/zkServer.sh status"
+	alias go2zk="$ZOOKEEPER_HOME/bin/zkCli.sh"
+
+	alias fsc12="$BASE_DIR/scala-2.12.1/bin/fsc12"
+	alias scala12="$BASE_DIR/scala-2.12.1/bin/scala12"
+	alias scalac12="$BASE_DIR/scala-2.12.1/bin/scalac12"
+	alias scaladoc12="$BASE_DIR/scala-2.12.1/bin/scaladoc12"
+    
 
     ---------------------------------------------------------------------------
 
 5.配置
-    MYSQL
+    MYSQL （单节点）
         # 编译环境
         cd /opt/packages/mysql-5.6.22
 
@@ -201,7 +228,7 @@
         mysqld --user=root &
         mysql -uroot -proot
 
-        # 查看当前默认密钥长度约束
+        # 查看当前默认密钥长度约束 
         mysql> select @@validate_password_length;
         +----------------------------+
         | @@validate_password_length |
@@ -227,6 +254,8 @@
         -----------------------------------
         [mysqld]
         user=mysql
+        # 关闭 validate 插件
+        validate_password=OFF
         .....
         -----------------------------------
 
@@ -241,7 +270,7 @@
         # 重新启动mysql
         systemctl restart mysql
 
-    REDIS
+    REDIS （单节点）
         cd /opt/softwares/redis-4.0.11
 
         make && make install
@@ -269,14 +298,29 @@
 
         vim core-site.xml
         ------------------------------------------------------------
-         <property>
+        <property>
             <name>fs.defaultFS</name>
             <value>hdfs://master:9000</value>
-          </property>
-          <property>
+        </property>
+       	<property>
             <name>hadoop.tmp.dir</name>
             <value>file:/opt/softwares/hadoop-2.7.4/tmp</value>
-          </property>
+       	</property>
+		
+		<!-- hadoop.proxyuser.xxx.hosts 为使用beeline 命令用户名称，而非连接用户名称-->
+		<property>
+		  	<name>hadoop.proxyuser.hive.hosts</name>
+		 	<!--value>master</value-->
+			<value>*</value>
+		</property>
+
+		<!-- hadoop.proxyuser.xxx.group xxx 使用beeline 命令用户名称，而非连接用户名称-->
+		<property>
+		  	<name>hadoop.proxyuser.hive.groups</name>
+		  	<!--value>hadoop</value-->
+		  	<value>*</value>
+		</property>
+		  
         ------------------------------------------------------------
 
         vim hdfs-site.xml
@@ -347,6 +391,16 @@
             <name>mapreduce.framework.name</name>
             <value>yarn</value>
         </property>
+		
+	    <!--配置历史服务器-->
+	    <property>
+	          <name>mapreduce.jobhistory.address</name>
+	          <value>master:10020</value>
+	    </property>
+	    <property>
+	          <name>mapreduce.jobhistory.webapp.address</name>
+	          <value>master:19888</value>
+	    </property>
         ------------------------------------------------------------
 
         vim slaves
@@ -360,8 +414,14 @@
         export JAVA_HOME=/opt/softwares/jdk1.8.0_181
         ------------------------------------------------------------
 
+		# 修改配置刷新		
+		alias hdfs_refresh="hdfs dfsadmin -refreshNodes"
+		alias yarn_refresh="yarn rmadmin -refreshNodes"
+		alias job_on="mr-jobhistory-daemon.sh start historyserver"
+		alias job_off="mr-jobhistory-daemon.sh stop historyserver"
+		
 
-    FLUME
+    FLUME （单节点）
         cd /opt/softwares/flume-1.8.0
 
         mv  conf/flume-env.sh.template conf/flume-env.sh
@@ -371,7 +431,7 @@
         ------------------------------------------------------------
 
 
-    KAFKA
+    KAFKA （单节点）
         cd /opt/softwares/kafka_2.11-1.1.0
 
         mv conf/zoo_template.cfg conf/zoo.cfg
@@ -382,7 +442,7 @@
         ------------------------------------------------------------
 
 
-    ZOOKEEPER
+    ZOOKEEPER （一主二次）
         cd /opt/softwares/zookeeper-3.4.5-cdh5.7.0
 
         mkdir data
@@ -406,7 +466,7 @@
         ------------------------------------------------------------
 
 
-    HBASE
+    HBASE （一主二次）
         vim hbase-env.sh
         ------------------------------------------------------------
         export JAVA_HOME=/opt/softwares/jdk1.8.0_181
@@ -423,7 +483,7 @@
             <name>hbase.cluster.distributed</name>
             <value>true</value>
         </property>
-
+		<!-- 只填host 无port-->
         <property>
             <name>hbase.zookeeper.quorum</name>
             <value>master,slave1,slave2</value>
@@ -441,9 +501,19 @@
         slave1
         slave2
         ------------------------------------------------------------
+		
+		vim hbase-env.sh
+        ------------------------------------------------------------
+		export JAVA_HOME=/opt/softwares/jdk1.8.0_181
+		export HBASE_OPTS="-XX:+UseConcMarkSweepGC"
+		export HBASE_MASTER_OPTS="$HBASE_MASTER_OPTS -XX:PermSize=128m -XX:MaxPermSize=128m -XX:ReservedCodeCacheSize=256m"
+		export HBASE_REGIONSERVER_OPTS="$HBASE_REGIONSERVER_OPTS -XX:PermSize=128m -XX:MaxPermSize=128m -XX:ReservedCodeCacheSize=256m"
+		export HBASE_MANAGES_ZK=falseG
+        ------------------------------------------------------------
+		
 
 
-    SPARK
+    SPARK （一主二次）
         cd /opt/softwares/spark-2.2.0-bin-hadoop2.7/conf
 
         vim spark-env.sh
@@ -466,7 +536,7 @@
         ------------------------------------------------------------
 
 
-    HIVE
+    HIVE （单节点）
         cd /opt/softwares/apache-hive-2.1.1-bin/
         mkdir mkdir log warehouse tmp
 
@@ -504,54 +574,100 @@
         -->
 
         <configuration>
+            <!-- 执行MR过程，HDFS展开路径-->
+            <property>
+                <name>hive.exec.scratchdir</name>
+                <value>/tmp/hive/scratchdir/</value>
+            </property>
 
-          <property>
-            <name>hive.exec.scratchdir</name>
-            <value>/opt/softwares/apache-hive-2.1.1-bin/tmp</value>
-          </property>
+            <!-- 源数据目录，mysql模式元数据保存在mysql,derby时保存在hdfs-->
+            <property>
+                <name>hive.metastore.warehouse.dir</name>
+                <value>/usr/hive/warehouse</value>
+            </property>
 
-          <property>
-              <name>hive.metastore.warehouse.dir</name>
-              <value>/opt/softwares/apache-hive-2.1.1-bin/warehouse</value>
-          </property>
+            <!-- 日志路径，默认本地文件系统 -->
+            <property>
+                <name>hive.querylog.location</name>
+                <value>/opt/softwares/apache-hive-2.1.1-bin/log</value>
+            </property>
 
-          <property>
-              <name>hive.querylog.location</name>
-              <value>/opt/softwares/apache-hive-2.1.1-bin/log</value>
-          </property>
+            <!-- mysql元数据连接 URL -->
+            <property>
+                <name>javax.jdo.option.ConnectionURL</name>
+                <value>jdbc:mysql://localhost:3306/hive?createDatabaseIfNotExist=true&amp;characterEncoding=UTF-8&amp;useSSL=false</value>
+            </property>
 
-          <property>
-              <name>javax.jdo.option.ConnectionURL</name>
-              <value>jdbc:mysql://localhost:3306/hive?createDatabaseIfNotExist=true&amp;characterEncoding=UTF-8&amp;useSSL=false</value>
-          </property>
-          <property>
-              <name>javax.jdo.option.ConnectionDriverName</name>
-              <value>com.mysql.jdbc.Driver</value>
-          </property>
-          <property>
-              <name>javax.jdo.option.ConnectionUserName</name>
-              <value>root</value>
-          </property>
-          <property>
-              <name>javax.jdo.option.ConnectionPassword</name>
-              <value>root</value>
-          </property>
+            <!-- mysql元数据驱动 -->
+            <property>
+                <name>javax.jdo.option.ConnectionDriverName</name>
+                <value>com.mysql.jdbc.Driver</value>
+            </property>
 
-      <property>
-          <name>hive.cli.print.header</name>
-          <value>true</value>
-      </property>
-       
-      <property>
-          <name>hive.cli.print.current.db</name>
-          <value>true</value>
-      </property>
+            <!-- mysq user -->
+            <property>
+                <name>javax.jdo.option.ConnectionUserName</name>
+                <value>hive</value>
+            </property>
 
+            <!-- mysql pwd -->
+            <property>
+                <name>javax.jdo.option.ConnectionPassword</name>
+                <value>hive</value>
+            </property>
+            
+            <!-- 查询显示表头 -->
+            <property>
+                <name>hive.cli.print.header</name>
+                <value>true</value>
+            </property>
+
+            <!-- 显示库名 -->
+            <property>
+                <name>hive.cli.print.current.db</name>
+                <value>true</value>
+            </property>
+
+            <!-- hiveserver2 thrift 协议绑定host,与beeline 访问host 一致 --> 
+            <property>
+                <name>hive.server2.thrift.bind.host</name> 
+                <value>master</value>
+            </property>
+
+            <!-- hiveserver2 thrift协议外包裹http协议通信端口-->
+            <property>
+                <name>hive.server2.thrift.http.port</name>
+                <value>10001</value>
+            </property>
+         
+            <!-- hivesever2 thrift 通信端口 --> 
+            <property>
+                <name>hive.server2.thrift.port</name> 
+                <value>10000</value>
+            </property>
+        
+            <!-- hiveserver2 长连接超时设置 -->
+            <property>
+                 <name>hive.server2.long.polling.timeout</name> 
+                 <value>5000</value>
+            </property>
+
+            <!-- 访问hiveserver2 服务 授信用户名,beeline 或 hue 访问用户名 -->
+            <property>
+                <name>hive.server2.thrift.client.user</name>
+                <value>hive</value>
+            </property>
+
+            <!-- 访问hiveserver2 服务 授信用户名,beeline 或 hue 访问用户名密钥-->
+            <property>
+                <name>hive.server2.thrift.client.password</name>
+                <value>hive</value>
+            </property>
 
         </configuration>
         ------------------------------------------------------------
 
-    KYLIN
+    KYLIN （一主二次）
         cd /opt/softwares/apache-kylin-2.3.2-bin/
 
         # 第一个问题是kylinweb界面load hive表会失败，第二个问题是cube build的第二步会报org/apache/Hadoop/hive/conf/hiveConf的错误。
@@ -623,29 +739,29 @@
 
     vim /usr/local/bin/xcall
     ----------------------------------------------------------------
-    #!/bin/sh
-    # 群调脚本
-    # 无惨直接退出
-    if (($#==0));then
-     echo "no args ..."   
-     exit 0
-    fi
-
-    source /etc/profile
-
-    DIR=`cd -P $(dirname $1);pwd`
-    USER=`whoami`
-    HOST=`hostname`
-    hosts=('master' 'slave1' 'slave2')
-
-    for host in ${hosts[@]}
-    do
-      echo "--- --- --- ssh $USER@$host $@ --- --- ---"
-      ssh $USER@$host $@
-    done
-
-    exit 0
-    ----------------------------------------------------------------
+	#!/bin/sh
+	# 群调脚本
+	# 无惨直接退出
+	if (($#==0));then
+	 echo "no args ..."   
+	 exit 0
+	fi
+	
+	source /etc/profile
+	
+	DIR=`cd -P $(dirname $1);pwd`
+	USER=`whoami`
+	HOST=`hostname`
+	hosts=('master' 'slave1' 'slave2')
+	
+	for host in ${hosts[@]}
+	do
+	  echo "--- --- --- ssh $USER@$host $@ --- --- ---"
+	  ssh $USER@$host $@
+	done
+	
+	exit 0
+	----------------------------------------------------------------
 
     vim /usr/local/bin/xsync
     ----------------------------------------------------------------
@@ -653,8 +769,8 @@
     # 分发脚本
 
     if (( $# == 0 ));then
-     echo "no args"       
-     exit 0
+     echo "no args"       
+     exit 0
     fi
 
     USER=`whoami`
@@ -667,7 +783,7 @@
       do
          if [[ "$MYSELF" != "$host" ]]; then
              echo "--- --- --- scp $DIR/$TARGET $USER@$host:/$DIR --- --- ---"
-             scp $DIR/$TARGET $USER@$host:/$DIR
+             scp -r $DIR/$TARGET $USER@$host:/$DIR
          fi
     done
 
@@ -751,17 +867,17 @@
     -rw------- 1 root root 3415 Aug  4 22:05 anaconda-ks.cfg
 
 
-7.配置HADOOP
+7.HADOOP安装启动 （一主二从）
     # 格式化 (master,slave1,slave2)
     hadoop namenode -format
 
     # 内存分配不足，导致 nodemanager 启动失败
     docker commmit -m "change_jdk" -a "whohow20094702@163.com" kylin_installed:v2 change_jdk:v3
 
-    # -m 重新分配内存 -p10000 beeline
-    docker run --privileged -it --name master -m 2048m -h master --net mynetwork --ip 172.18.0.30 -p 50070:50070 -p 8088:8088 -p 6370:6379 -p 3306:3306 -p 2180:2181 -p 7070:7070 -p 9090:9092 -p10000:10000 change_jdk:v3 /usr/sbin/init
-    docker run --privileged -it --name slave1 -m 2048m -h slave1 --net mynetwork --ip 172.18.0.31 -p 6371:6379 -p 3307:3306 -p 2181:2181 -p 7071:7070 -p 9091:9092 change_jdk:v3 /usr/sbin/init
-    docker run --privileged -it --name slave2 -m 2048m -h slave2 --net mynetwork --ip 172.18.0.32 -p 6372:6379 -p 3308:3306 -p 2182:2181 -p 7072:7070 -p 9092:9092 change_jdk:v3 /usr/sbin/init
+    # -m 重新分配内存 -p10000 beeline , -p16010:16010 hbase webUI
+    docker run --privileged -it --name master -m 4096m -h master --net mynetwork --ip 172.18.0.30 -p 50070:50070 -p 8088:8088 -p 6370:6379 -p 3306:3306 -p 2180:2181 -p 7070:7070 -p 9090:9092 -p 10000:10000 -p 16010:16010 hbase_installed:v4 /usr/sbin/init
+    docker run --privileged -it --name slave1 -m 4096m -h slave1 --net mynetwork --ip 172.18.0.31 -p 6371:6379 -p 3307:3306 -p 2181:2181 -p 7071:7070 -p 9091:9092 hbase_installed:v4 /usr/sbin/init
+    docker run --privileged -it --name slave2 -m 4096m -h slave2 --net mynetwork --ip 172.18.0.32 -p 6372:6379 -p 3308:3306 -p 2182:2181 -p 7072:7070 -p 9092:9092 hbase_installed:v4 /usr/sbin/init
 
     # 调整权限和属主
     cd /opt/softwares
@@ -771,6 +887,15 @@
     # 启动集群
     cd /opt/softwares/hadoop-2.7.4
     start-all.sh
+
+    # 开放授权（Permission denied: user=dr.who）
+    hdfs dfs -chmod -R 755 /
+
+    # 查了HDFS 
+    http://127.0.0.1:50070/explorer.html#/ 
+    
+    # 查看YARN
+    http://localhost:8088/cluster
 
     # pi 计算测试 http://localhost:8088/cluster
     hadoop jar share/hadoop/mapreduce/hadoop-mapreduce-examples-2.7.4.jar pi 10 100
@@ -791,17 +916,497 @@
     290 NodeManager
     810 Jps
 
+	# 重新格式化
+	xcall rm -rf /opt/softwares/hadoop-2.7.4/{data/*,tmp/*,name/*,logs/*}
+	
+	# master节点
+	hdfs namenode -format
+	
+	start-all.sh
+	
+	# xcall jps
+	
+	# 浏览器访问地址
+	HDFS:	http://master:50070
+	YARN:	http://master:8088
+	JOBHIS:	http://master:19888/jobhistory
 
-8.配置HIVE
+
+8.HIVE安装启动 （单节点）
+    cd /opt/softwares/apache-hive-2.1.1-bin/
+
+    # 设置mysql 开机启动
+    chkconfig mysqld on
+
+    # 启动mysql
+    systemctl mysqld start 
+
+    # 初始化生成 metastore 元数据信息 (derby方式元数据存储在本地，mysql方式需提前启动mysql)
+    bin/schematool -dbType mysql -initSchema
+
+    vim bin/hive_on
+    ------------------------------------------------------------------------------------------
+    #!/bin/bash
+
+    hive --service metastore >> $HIVE_HOME/log/metastore.log 2>&1 &
+    hive --service hiveserver2 >> $HIVE_HOME/log/hiveserver2.log 2>&1 &
+
+    sleep 2
+
+    info=`ps -ef | grep hive`
+    echo $info
+    ------------------------------------------------------------------------------------------
+
+    vim bin/hive_off
+    ------------------------------------------------------------------------------------------
+    #!/bin/bash
+
+    ps -ef  | grep -i hiveserver2 | grep -v 'grep' |awk -F' ' '{print $2}' | xargs kill
+    ps -ef  | grep -i metastore | grep -v 'grep' |awk -F' ' '{print $2}' | xargs kill
+
+    sleep 2
+
+    info=`ps -ef | grep -i hive*`
+    echo $info
+    ------------------------------------------------------------------------------------------
+
+    vim bin/bee
+    ------------------------------------------------------------------------------------------
+    echo 'beeline -u jdbc:hive2://master:10000 -n "hive" -p "hive"'
+    ------------------------------------------------------------------------------------------
+
+    vim bin/hs2_info.sh
+    ------------------------------------------------------------------------------------------
+    #!/bin/sh
+
+    echo '---------- start hiveserver2 ----------'
+    echo 'hive --service metastore >> $HIVE_HOME/log/metastore.log 2>&1 &'
+    echo 'hive --service hiveserver2 >> $HIVE_HOME/log/hiveserver2.log 2>&1 &'
+
+    echo '\n---------- stop hiveserver2 ------------'
+    echo """ps -ef  | grep -i hiveserver2 | grep -v 'grep' |awk -F' ' '{print \$2}' | xargs kill"""
+    echo """ps -ef  | grep -i metastore | grep -v 'grep' |awk -F' ' '{print \$2}' | xargs kill"""
+
+    echo "\n----------- beeline --------------"
+    echo 'beeline -u jdbc:hive2://master:10000 -n "hive" -p "hive"'
+    ------------------------------------------------------------------------------------------
+
+    chmod 755 bin/{hive_on,hive_off,bee,hs2_info.sh}
+
+    # 登录hive 并尝试创建表
+    hive
     create external table dual(
         id      int
        ,name    string
        ,hobby   array<string>
-       ,add     map<String,string>
+       ,add     map<string,string>
     )
     row format delimited fields terminated by '\t'
     collection items terminated by ','
     map keys terminated by ':'
     location '/dual';
+
+9.FLUME安装启动 （单节点）
+    cd $FLUME_HOME
+
+    vim cat agent/cons2cons_agent.conf 
+    ------------------------------------------------------------------------------------------
+    ##  功能: flume接收netcat往指定端口发送的数据,实时输出到控制台展示
+    # 启动 agent: nohup bin/flume-ng agent  --conf conf/ --name cons2cons_agent --conf-file agent/cons2cons_agent.conf -Dflume.root.logger==INFO,console 2>&1 &
+    # 输出：tail -f nohup.out
+    # 输入: nc localhost 4040
+     
+    # step1: 声明本Agent代理的3大组件souce,sink,channel
+    ## cons2cons_agent.sources=r1 r2 r3 声明多个source,多个sink,channel 同理往后配,空格分割
+    cons2cons_agent.sources=r1
+    cons2cons_agent.sinks=k1
+    cons2cons_agent.channels=c1
+     
+    # step2: 定义数据源source(使用natcat服务,往本机阶段4040端口发送数据包)
+    cons2cons_agent.sources.r1.type=netcat
+    cons2cons_agent.sources.r1.bind=localhost
+    cons2cons_agent.sources.r1.port=4040
+     
+    # step3:定义数据输出目标sink(以日志形式将监听端口的数据输出到控制台)
+    cons2cons_agent.sinks.k1.type=logger
+     
+    # step4:定义数据通道Channel(实质时组装Source 和 Sink 的Event事件队列)
+    ## 基于内存,构建数据通道
+    cons2cons_agent.channels.c1.type=memory
+    ## 数据通道最大事件个数负载(默认1000)
+    cons2cons_agent.channels.c1.capacity=1000
+    ## 数据单次会话最大事件负载(默认100)
+    cons2cons_agent.channels.c1.transactionCapacity=100
+     
+    # step5:组装三大组件
+    ## 同一份数据源Source可以交给多个的Channel(即,Source 与 Chanel 是"一对多"关系)
+    cons2cons_agent.sources.r1.channels=c1
+    ## 同一个数据输出源,只能绑定单个Channel(即,Sink 与 Channel是"一对一"关系)
+    cons2cons_agent.sinks.k1.channel=c1
+
+    ------------------------------------------------------------------------------------------
+
+    # 安装 netcat
+    yum install nmap-ncat
+
+    # 监听本机 4040 端口 (输入)
+    nc localhost 4040
+
+    # nc -> flume -> nohup.out (输出)
+    # tail -f nohup.out
+
+10.ZOOKEEPER 安装与启动 （一主二从）
+    cd $ZOOKEEPER_HOME
+
+    vim conf/zoo.cfg
+    ------------------------------------------------
+    ....
+    server.1=master:2888:3888
+    server.2=slave1:2888:3888
+    server.3=slave2:2888:3888
+    maxClientCnxns=60
+    ------------------------------------------------
+
+    [master]
+    vim data/myid
+    ------------------
+    1
+    ------------------
+
+    [salve1]
+    vim data/myid
+    ------------------
+    2
+    ------------------
+
+    [salve2]
+    vim data/myid
+    ------------------
+    3
+    ------------------
+
+    xcall zkServer.sh start
+    --- --- --- ssh root@master zkServer.sh start --- --- ---
+    JMX enabled by default
+    Using config: /opt/softwares/zookeeper-3.4.5-cdh5.7.0/bin/../conf/zoo.cfg
+    Starting zookeeper ... STARTED
+    --- --- --- ssh root@slave1 zkServer.sh start --- --- ---
+    JMX enabled by default
+    Using config: /opt/softwares/zookeeper-3.4.5-cdh5.7.0/bin/../conf/zoo.cfg
+    Starting zookeeper ... STARTED
+    --- --- --- ssh root@slave2 zkServer.sh start --- --- ---
+    JMX enabled by default
+    Using config: /opt/softwares/zookeeper-3.4.5-cdh5.7.0/bin/../conf/zoo.cfg
+    Starting zookeeper ... STARTED
+
+    xcall jps
+    --- --- --- ssh root@master jps --- --- ---
+    776 QuorumPeerMain
+    828 Jps
+    --- --- --- ssh root@slave1 jps --- --- ---
+    219 QuorumPeerMain
+    254 Jps
+    --- --- --- ssh root@slave2 jps --- --- ---
+    226 QuorumPeerMain
+    255 Jps
+    
+    xcall zkServer.sh status
+    --- --- --- ssh root@master zkServer.sh status --- --- ---
+    JMX enabled by default
+    Using config: /opt/softwares/zookeeper-3.4.5-cdh5.7.0/bin/../conf/zoo.cfg
+    Mode: follower
+    --- --- --- ssh root@slave1 zkServer.sh status --- --- ---
+    JMX enabled by default
+    Using config: /opt/softwares/zookeeper-3.4.5-cdh5.7.0/bin/../conf/zoo.cfg
+    Mode: leader
+    --- --- --- ssh root@slave2 zkServer.sh status --- --- ---
+    JMX enabled by default
+    Using config: /opt/softwares/zookeeper-3.4.5-cdh5.7.0/bin/../conf/zoo.cfg
+    Mode: follower
+
+    zkCli.sh
+    [zk: localhost:2181(CONNECTED) 0] ls /
+    [zookeeper]
+
+11.KAFKA 安装配置
+    cd $KAFKA_HOME
+    
+    # 启动zk
+    xcall zkServer.sh start
+
+    vim bin/kf_helper
+    ------------------------------------------------------------------------------------------
+    #!/bin/bash
+
+    server_home="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+    zk_host=localhost
+
+    case $1 in
+    list_topic)
+            echo "${server_home}/kafka-topics.sh --list --zookeeper $zk_host:2181"
+            ${server_home}/kafka-topics.sh --list --zookeeper $zk_host:2181
+            exit 0
+            ;;
+    desc_topic)  
+            echo "${server_home}/kafka-topics.sh --zookeeper localhost:2181 --describe --topic tp_name"
+            ${server_home}/kafka-topics.sh --zookeeper localhost:2181 --describe --topic $2
+            exit 0
+            ;;
+    add_topic)
+            echo "${server_home}/kafka-topics.sh --create --zookeeper $zk_host:2181 --replication-factor 1 --partitions 2 --topic tp_name"
+            ${server_home}/kafka-topics.sh --create --zookeeper $zk_host:2181 --replication-factor 1 --partitions 2 --topic $2
+            exit 0
+            ;;
+    del_topic)
+            echo "${server_home}/kafka-topics.sh --zookeeper $zk_host:2181 --delete --topic tp_name"
+            ${server_home}/kafka-topics.sh --zookeeper $zk_host:2181 --delete --topic $2
+            exit 0
+            ;;
+    producer)
+            echo "${server_home}/kafka-console-producer.sh --broker-list localhost:9092 --topic tp_name"
+            ${server_home}/kafka-console-producer.sh --broker-list localhost:9092 --topic $2
+            exit 0
+            ;;
+    consumer)
+            echo "${server_home}/kafka-console-consumer.sh -zookeeper $zk_host:2181 --from-beginning --topic tp_name"
+            ${server_home}/kafka-console-consumer.sh -zookeeper $zk_host:2181 --from-beginning --topic $2
+            exit 0
+            ;;
+    start)
+            echo "${server_home}/kafka-server-start.sh ${server_home}/../config/server.properties 1>/dev/null 2>&1 &"
+            ${server_home}/kafka-server-start.sh ${server_home}/../config/server.properties 1>/dev/null 2>&1 &
+            sleep 2
+            jps
+            exit 0
+            ;;
+    stop)
+            echo "${server_home}/kafka-server-stop.sh"
+            ${server_home}/kafka-server-stop.sh
+            sleep 2
+            jps
+            exit 0
+            ;;
+    gp_tp_offset)
+            echo "${server_home}/kafka-consumer-offset-checker.sh --zookeeper $zk_host:2181 --group gp_name --topic tp_name"
+            ${server_home}/kafka-consumer-offset-checker.sh --zookeeper $zk_host:2181 --group gp_name --topic $2
+            exit 0
+            ;;
+    *)
+        echo "Usage: $0 {list_topic|desc_topic|add_topic|del_topic|start|stop|producer|consumer|gp_tp_offset}" >&2
+    esac
+
+    ------------------------------------------------------------------------------------------
+
+    chmod 755 bin/kf_helper
+
+    # 启动kafka broker
+    kf_helper start 
+
+    # 创建 test1 topic
+    kf_helper add_topic test1
+
+    # 启动 producer
+    kf_helper producer test1
+
+    # 启动 consumer
+    kf_helper consumer test1
+
+    # 查看消息接受  producer -> broker -> consumer
+
+
+12.SPARK 安装配置 (yarn集群模式,一主二从)
+    
+    cd $SPARK_HOME
+
+    vim conf/spark-env.sh
+    ----------------------------------------------------
+    export BASE_DIR=/opt/softwares
+    export HADOOP_HOME=$BASE_DIR/hadoop-2.7.4
+    export SCALA_HOME=$BASE_DIR/scala-2.10.5
+    export JAVA_HOME=/opt/softwares/jdk1.8.0_181
+    export SPARK_MASTER_IP=master
+    export SPARK_WORKER_MEMORY=1g
+    export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+    ----------------------------------------------------
+
+    vim slaves
+    ----------------------------
+    slave1
+    slave2
+    ----------------------------
+	
+	# 将spark 与 hive 打通，metastore_db 同 hive 一样使用mysql，否则在本地创建
+	ln -s /opt/softwares/apache-hive-2.1.1-bin/conf/hive-site.xml /opt/softwares/spark-2.2.0-bin-hadoop2.7/conf
+	ln -s /opt/softwares/apache-hive-2.1.1-bin/lib/mysql-connector-java-5.1.44-bin.jar /opt/softwares/spark-2.2.0-bin-hadoop2.7/jars/
+
+    # 启动hadoop
+    hadoop_on
+    xcall jps
+
+    # 启动spark
+    spark-shell
+    ------------------------------------------------------------------------------------------
+    scala> val rdd=sc.makeRDD(Array("aa","bb","cc"))
+    rdd: org.apache.spark.rdd.RDD[String] = ParallelCollectionRDD[0] at makeRDD at <console>:24
+
+    scala> rdd.count()
+    res0: Long = 3   
+	
+	val rdd2=sc.makeRDD(Array("ab","ac","abc")).flatMap(_.split("")).map((_,1)).reduceByKey(_+_)
+	
+    scala> :quit
+    ------------------------------------------------------------------------------------------
+
+13.HBASE 安装配置（一主二从）
+	cd $HBASE_HOME/lib
+
+    # 替换jar （将lib 目录下所有 hadoop 前缀开头jar统一替换成为实际hadoop 集群版本，zookeeper jar 也做相同替换.(经查证发现 hbase-1.4.0 已经兼容了hadoop-xx-2.7.4,所以只需要对 zk jar 进行替换就可以了)
+	[root@master hbase-1.4.0-bin]# ls lib/ | grep hadoop
+	hadoop-annotations-2.7.4.jar
+	hadoop-auth-2.7.4.jar
+	hadoop-client-2.7.4.jar
+	hadoop-common-2.7.4.jar
+	hadoop-hdfs-2.7.4.jar
+	hadoop-mapreduce-client-app-2.7.4.jar
+	hadoop-mapreduce-client-common-2.7.4.jar
+	hadoop-mapreduce-client-core-2.7.4.jar
+	hadoop-mapreduce-client-jobclient-2.7.4.jar
+	hadoop-mapreduce-client-shuffle-2.7.4.jar
+	hadoop-yarn-api-2.7.4.jar
+	hadoop-yarn-client-2.7.4.jar
+	hadoop-yarn-common-2.7.4.jar
+	hadoop-yarn-server-common-2.7.4.jar
+	
+    ln -s /opt/softwares/zookeeper-3.4.5-cdh5.7.0/zookeeper-3.4.5-cdh5.7.0.jar /opt/softwares/hbase-1.4.0/lib/
+
+	# 关联配置
+	ln -s /opt/softwares/hadoop-2.7.4/etc/hadoop/core-site.xml /opt/softwares/hbase-1.4.0/conf/
+	
+	# 调整 master slave1 slave2 时间同步
+	# 查看系统时区是否存在问题 （+0800东八区）
+	[root@master hbase-1.4.0-bin]# xcall date -R
+	--- --- --- ssh root@master date -R --- --- ---
+	Sun, 23 Sep 2018 17:38:31 +0800
+	--- --- --- ssh root@slave1 date -R --- --- ---
+	Sun, 23 Sep 2018 17:38:31 +0800
+	--- --- --- ssh root@slave2 date -R --- --- ---
+	Sun, 23 Sep 2018 17:38:31 +0800
+
+	# 配置时区 
+	rm -rf /etc/localtime
+	ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime 
+	
+	# 安装 ntpate 服务
+	xcall yum install ntpdate
+	xcall chkconfig ntpdate on
+	xcall service ntpdate start
+	
+	# master slave1 slave2 分别配置定时任务，定期将系统时钟同步给硬件时钟
+	xcall crond restart
+	crontab -e
+	-----------------------------
+	*/15 * * * * /sbin/hwclock -w
+	-----------------------------
+	
+	# 手动刷新，并立即都与默认忘了时间服务器同步
+	service cront restart
+
+	# 查看时间是否一致
+	[root@master hbase-1.4.0-bin]# xcall date
+	--- --- --- ssh root@master date --- --- ---
+	Sun Sep 23 17:44:33 CST 2018
+	--- --- --- ssh root@slave1 date --- --- ---
+	Sun Sep 23 17:44:34 CST 2018
+	--- --- --- ssh root@slave2 date --- --- ---
+	Sun Sep 23 17:44:34 CST 2018
+	
+	# 启动hbase
+	start-hbase.sh
+	[root@master conf]# xcall jps
+	--- --- --- ssh root@master jps --- --- ---
+	18496 SecondaryNameNode
+	18656 ResourceManager
+	33408 Jps
+	31573 HMaster
+	24028 QuorumPeerMain
+	18302 NameNode
+	--- --- --- ssh root@slave1 jps --- --- ---
+	14355 Jps
+	12519 DataNode
+	12621 NodeManager
+	13966 HRegionServer
+	13151 QuorumPeerMain
+	--- --- --- ssh root@slave2 jps --- --- ---
+	14432 HRegionServer
+	13554 QuorumPeerMain
+	12515 DataNode
+	12617 NodeManager
+	14809 Jps
+	
+	# 命令行 或浏览器 http://master:16010/master-status
+    hbase shell
+	hbase(main):001:0> list
+	TABLE                                                                                                                                                                                                                                    
+	0 row(s) in 0.2610 seconds
+
+	=> []
+	hbase(main):002:0> exit
+	
+	
+14.KYLIN
+	cd $KYLIN_HOME
+
+	# 微调配置
+    vim kylin.properties
+    ------------------------------------------------------------
+    kylin.env=DEV
+    kylin.server.mode=all      ###kylin主节点模式，从节点的模式为query，只有这一点不一样
+    kylin.server.cluster-servers=master:7070,slave1:7070,slave2:7070
+    kylin.source.hive.database-for-flat-table=kylin_flat_db
+    kylin.storage.hbase.compression-codec=none
+    ------------------------------------------------------------
+	
+	# 启动依赖环境
+		# hadoop/yarn/jobhistory
+		start-all.sh 
+		job_on
+	
+		# hive
+		hive --service metastore >> $HIVE_HOME/log/metastore.log 2>&1 &
+		hive --service hiveserver2 >> $HIVE_HOME/log/hiveserver2.log 2>&1 &
+	
+		# zookeeper
+		xcall $ZOOKEEPER/bin/zkServer.sh start
+		xcall jps
+	
+		# hbase
+		start-hbase.sh
+	
+	# 环境检查 (或 bin/find-env.sh 检查全部环境) ，不报错就说明正常
+	bin/find-hive-dependency.sh 
+	bin/find-hbase-dependency.sh 
+	bin/find-kafka-dependency.sh 
+	
+	# 启动kylin
+	bin/kylin-start.sh
+	
+	http://节点id:7070/kylin
+	
+	# 样本构建(自动导表 创建工程，建cube)
+	bin/sample.sh 
+	
+	http://master:7070/kylin >> System [reload metadata] >> 开始构建
+	
+	
+	
+	
+	
+	
+	
+	
+	
+
+
+
 
 
