@@ -1277,7 +1277,7 @@
 	hadoop-yarn-common-2.7.4.jar
 	hadoop-yarn-server-common-2.7.4.jar
 	
-    ln -s /opt/softwares/zookeeper-3.4.5-cdh5.7.0/zookeeper-3.4.5-cdh5.7.0.jar /opt/softwares/hbase-1.4.0/lib/
+       ln -s /opt/softwares/zookeeper-3.4.5-cdh5.7.0/zookeeper-3.4.5-cdh5.7.0.jar /opt/softwares/hbase-1.4.0/lib/
 
 	# 关联配置
 	ln -s /opt/softwares/hadoop-2.7.4/etc/hadoop/core-site.xml /opt/softwares/hbase-1.4.0/conf/
@@ -1319,6 +1319,10 @@
 	Sun Sep 23 17:44:34 CST 2018
 	--- --- --- ssh root@slave2 date --- --- ---
 	Sun Sep 23 17:44:34 CST 2018
+	
+	# 设置 crond ntpdate开机启动
+        xcall chkconfig ntpdate on
+	xcall chkconfig crond on
 	
 	# 启动hbase
 	start-hbase.sh
