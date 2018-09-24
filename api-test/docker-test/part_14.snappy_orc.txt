@@ -1,0 +1,363 @@
+Hadoop 源码编译支持 snappy 压缩
+1.下载安装包
+	centos7x64 
+	jdk1.8.0_181
+	apache-maven-3.3.9 
+	protobuf-2.5.0.tar.gz
+	apache-ant-1.9.13-bin.zip
+	
+    hadoop-2.7.4-src.tar.gz
+	snappy-1.1.3.tar.gz
+	
+	
+2.提前配置环境变量
+	vim /etc/profile
+	--------------------------------------------------
+	BASE_DIR=/opt/softwares
+	export BASE_DIR
+
+	export JAVA_HOME=$BASE_DIR/jdk1.8.0_181
+	export PATH=$PATH:$JAVA_HOME/bin:$JAVA_HOME/sbin
+
+	MAVEN_HOME=$BASE_DIR/apache-maven-3.3.9
+	MAVEN_OPTS="-Xms1024m -Xmx2048m -Xss36m -XX:MaxPermSize=512m"
+	PATH=$PATH:$MAVEN_HOME/bin
+	export MAVEN_HOME MAVEN_OPTS PATH
+
+	ANT_HOME=$BASE_DIR/apache-ant-1.9.13
+	PATH=$PATH:$ANT_HOME/bin
+	export ANT_HOME PATH
+
+	LD_LIBRARY_PATH=$BASE_DIR/protobuf-2.5.0
+	PATH=$PATH:$LD_LIBRARY_PATH/bin
+	export LD_LIBRARY_PATH PATH
+
+	SCALA_HOME=$BASE_DIR/scala-2.12.1
+	PATH=$PATH:$SCALA_HOME/bin
+	export SCALA_HOME PATH
+	--------------------------------------------------
+	source /etc/profile
+	
+
+3.编译环境准备
+	# 宿主机与虚拟机传递文件工具
+		yum install -y nmap-ncat
+	
+		# 发送端
+		nc maven 4000 < hadoop-2.7.4-src.tar.gz 
+
+		# 接受端 先关闭防火墙
+		systemctl stop iptables
+		systemctl stop firewalld
+		chkconfig disable chkconfig
+		chkconfig disable firewalld
+	
+		nc -l 4000 > hadoop-2.7.4-src.tar.gz 
+	
+	# 安装编译环境 gcc make ...
+		yum install glibc-headers gcc-c++ make cmake openssl-devel  ncurses-devel
+	
+	# 安装 ant 打包工具编译环境
+		tar -zxvf apache-ant-1.9.13-bin.zip -C /opt/softwares
+	
+		# 已经提前配置好环境变量，直接检测
+		[root@maven target]# ant -v
+		Apache Ant(TM) version 1.9.13 compiled on July 10 2018 《》
+		Trying the default build file: build.xml
+		Buildfile: build.xml does not exist!
+		Build failed
+	
+	# 安装protobuf编译环境
+		tar -zxvf protobuf-2.5.0.tar.gz -C /opt/softwares
+		cd /opt/softwares/protobuf-2.5.0
+		
+		./configure
+		make && make install
+				
+		[root@maven target]# protoc --version
+		libprotoc 2.5.0
+
+	# 安装 snappy lib 库
+		tar -zxvf snappy-1.1.3.tar.gz -C /opt/softwares
+		cd /opt/softwares/snappy-1.1.3
+		
+		./configure
+		make && make install
+		
+		[root@maven target]# ls /usr/local/lib | grep snappy
+		libsnappy.a
+		libsnappy.la
+		libsnappy.so
+		libsnappy.so.1
+		libsnappy.so.1.3.0
+		
+	# maven 配置镜像仓库
+		# 解压maven官网基础镜像到本地
+		tar -zxvf repository.tat.gz /opt/softwares/apache-maven-3.3.9
+		
+		# 配置本地仓库和远程镜像仓库
+		vim /opt/softwares/apache-maven-3.3.9/conf/settings.xml 
+		-----------------------------------------------------------------------------------
+		...
+		<localRepository>/Users/huhao/apache-maven-3.3.9/repository</localRepository>
+		 <mirrors>
+		
+			<mirror>
+			    <id>aliyun-repo</id>
+			    <name>阿里云</name>
+			    <mirrorOf>central</mirrorOf>
+			    <url>http://maven.aliyun.com/nexus/content/groups/public/</url>
+			</mirror>
+			<mirror>
+			    <id>maven-cn-repo</id>
+			    <name>cn 管仓</name>
+			    <mirrorOf>central</mirrorOf>
+			    <url>http://maven.net.cn/content/groups/public/</url>
+			</mirror>
+			<mirror>
+			    <id>maven2-repo</id>
+			    <name>maven2管仓</name>
+			    <mirrorOf>central</mirrorOf>
+			    <url>https://repo.maven.apache.org/maven2/</url>
+			</mirror>
+			<mirror>
+			    <id>jboss2-repo</id>
+			    <name>jboss 管仓</name>
+			    <mirrorOf>central</mirrorOf>
+			    <url>http://repository.jboss.com/maven2/</url>
+			</mirror>
+
+			<mirror>
+			    <id>mvnrepository-repo</id>
+			    <name>管仓推荐1</name>
+			    <mirrorOf>central</mirrorOf>
+			    <url>http://mvnrepository.com/</url>
+			</mirror>
+			<mirror>
+			    <id>mvnrepository-repo2</id>
+			    <name>管仓推荐2</name>
+			    <mirrorOf>central</mirrorOf>
+			    <url>http://repo1.maven.org/maven2</url>
+			</mirror>
+			<mirror>
+			    <id>jboss-repo</id>
+			    <name>jboss仓库</name>
+			    <mirrorOf>central</mirrorOf>
+			    <url>http://repository.jboss.org/nexus/content/groups/public</url>
+			</mirror>
+			<mirror>
+			    <id>ibiblio-repo</id>
+			    <name>ibiblio仓库</name>
+			    <mirrorOf>central</mirrorOf>
+			    <url>http://mirrors.ibiblio.org/maven2/</url>
+			</mirror>
+			<mirror>
+			    <id>antelink-repo</id>
+			    <name>antelink 仓库</name>
+			    <mirrorOf>central</mirrorOf>
+			    <url>http://maven.antelink.com/content/repositories/central/</url>
+			</mirror>
+			<mirror>
+			    <id>openkoala-repo</id>
+			    <name>openkoala 仓库</name>
+			    <mirrorOf>central</mirrorOf>
+			    <url>http://nexus.openkoala.org/nexus/content/groups/Koala-release/</url>
+			</mirror>
+			<mirror>
+			    <id>cloudera-repo</id>
+			    <name>cloudera</name>
+			    <mirrorOf>central</mirrorOf>
+			    <url>https://repository.cloudera.com/content/repositories/releases/</url>
+			</mirror>
+			<mirror>
+			    <id>tmatesoft-repo</id>
+			    <name>tmatesoft 仓库</name>
+			    <mirrorOf>central</mirrorOf>
+			    <url>http://maven.tmatesoft.com/content/groups/public/</url>
+			</mirror>
+
+			<mirror>
+			    <id>maven-2-repo</id>
+			    <name>maven</name>
+			    <mirrorOf>central</mirrorOf>
+			    <url>http://central.maven.org/maven2/</url>
+			</mirror>
+
+		</mirrors>
+
+		...
+		-----------------------------------------------------------------------------------
+		
+		# 检验
+		[root@maven target]# mvn -v
+		Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
+		Apache Maven 3.3.9 (bb52d8502b132ec0a5a3f4c09453c07478323dc5; 2015-11-11T00:41:47+08:00)
+		Maven home: /opt/softwares/apache-maven-3.3.9
+		Java version: 1.8.0_181, vendor: Oracle Corporation
+		Java home: /opt/softwares/jdk1.8.0_181/jre
+		Default locale: en_US, platform encoding: UTF-8
+		OS name: "linux", version: "3.10.0-862.11.6.el7.x86_64", arch: "amd64", family: "unix"
+		
+
+4.支持snappy 压缩功能 hadoop 源码编译	
+	tar -zxvf hadoop-2.7.4-src.tar.gz /opt/packages
+	
+	cd /opt/packages/hadoop-2.7.4-src
+	
+    mvn clean package -DskipTests -Pdist,native -Dtar -Dsnappy.lib=/usr/local/lib -Dbundle.snappy
+	
+	cd hadoop-dist/target
+	[root@maven target]# ll
+	total 584388
+	drwxr-xr-x. 2 root root        28 Sep 29 14:11 antrun
+	drwxr-xr-x. 3 root root        22 Sep 29 14:11 classes
+	-rw-r--r--. 1 root root      1870 Sep 29 14:11 dist-layout-stitching.sh
+	-rw-r--r--. 1 root root       643 Sep 29 14:11 dist-tar-stitching.sh
+	drwxr-xr-x. 9 root root       149 Sep 29 14:11 hadoop-2.7.4        <<< 已经解压了
+	-rw-r--r--. 1 root root 198937436 Sep 29 14:11 hadoop-2.7.4.tar.gz.  <<< 可直接使用
+	-rw-r--r--. 1 root root     26520 Sep 29 14:11 hadoop-dist-2.7.4.jar. 
+	-rw-r--r--. 1 root root 399385702 Sep 29 14:11 hadoop-dist-2.7.4-javadoc.jar
+	-rw-r--r--. 1 root root     24050 Sep 29 14:11 hadoop-dist-2.7.4-sources.jar
+	-rw-r--r--. 1 root root     24050 Sep 29 14:11 hadoop-dist-2.7.4-test-sources.jar
+	drwxr-xr-x. 2 root root        51 Sep 29 14:11 javadoc-bundle-options
+	drwxr-xr-x. 2 root root        28 Sep 29 14:11 maven-archiver
+	drwxr-xr-x. 3 root root        22 Sep 29 14:11 maven-shared-archive-resources
+	drwxr-xr-x. 3 root root        22 Sep 29 14:11 test-classes
+	drwxr-xr-x. 2 root root         6 Sep 29 14:11 test-dir
+	
+	ls lib/native
+	libhadoop.a  libhadooppipes.a  libhadoop.so  libhadoop.so.1.0.0  libhadooputils.a  libhdfs.a  libhdfs.so  libhdfs.so.0.0.0  libsnappy.a  libsnappy.la  libsnappy.so  libsnappy.so.1  libsnappy.so.1.3.0
+	
+	# 
+	scp -r lib/native master:/opt/softwares/hadoop-2.7.4/lib/
+	
+5.开启hadoop集群压缩功能
+	cd /opt/softwares/hadoop-2.7.4
+	
+	# 集群分发
+	xsync lib/native
+	
+	# 开启压缩配置
+	vim etc/hadoop/mapred-site.xml
+	----------------------------------------
+    <!-- shuffle io 阶段 支持压缩 -->
+    <property>
+    	<name>io.compression.codecs</name>
+    	<value>org.apache.hadoop.io.compress.SnappyCodec</value>
+    </property>
+  
+    <!-- mapreduce 过程支持压缩,以及压缩编码 -->
+    <property>
+    	<name>mapreduce.map.output.compress</name>
+    	<value>true</value>
+    </property>
+  
+    <property>
+    	<name>mapreduce.map.output.compress.codecs</name>
+    	<value>org.apache.hadoop.io.compress.SnappyCodec</value>
+    </property>
+  
+    <!-- mapreduce 输出文件支持压缩，压缩级别，以及压缩编码 -->
+    <property>
+    	<name>mapreduce.output.fileoutputformat.compress</name>
+    	<value>true</value>
+    </property>
+  
+    <property>
+    	<name>mapreduce.output.fileoutputformat.compress.type</name>
+    	<value>RECORD</value>
+    </property>
+  
+    <property>
+    	<name>mapreduce.output.fileoutputformat.compress.codecs</name>
+    	<value>org.apache.hadoop.io.compress.SnappyCodec</value>
+    </property>
+	----------------------------------------
+	
+	# 刷新 或 重启
+	hdfs dfsadmin -refresh
+	yarn rmadmin -refresh
+	
+	# 启动 hive 或 直接使用配置好的别名 hive_on
+	hive --service metastore >> $HIVE_HOME/log/metastore.log 2>&1 &
+	hive --service hiveserver2 >> $HIVE_HOME/log/hiveserver2.log 2>&1 &
+	
+	# vim /opt/softwares/data.txt
+	----------------------------------------
+	tom     12
+	jack    13
+	lily    13
+	----------------------------------------
+	
+	# hive
+	hive (test_db)>
+	# 建库
+	create database if not exists test_db location '/usr/hive/warehouse/test_db';
+	use test_db;
+	
+	# 创建最简单外部表
+	create external table stu(
+	name string,
+	age int
+	)row format delimited fields terminated by '\t';
+
+	# 创建 orc（列式存储）格式表
+	create external table stu_orc(
+	name string,
+	age int
+	) row format delimited fields terminated by '\t'
+	stored as orc tblproperties('orc.compress'='NONE');
+	
+	# 创建基于snappy 格式压缩（IO）,ORC格式存储 （CPU）的外部表
+	create external table stu_orc_snappy(
+	name string,
+	age int
+	) row format delimited fields terminated by '\t'
+	stored as orc tblproperties('orc.compress'='SNAPPY');
+	
+	# 从本地装在数据到hive表 （不发生MR）
+	load data inpath '/opt/softwares/data.txt' into table stu;
+	hive (test_db)> select * from stu;
+	OK
+	stu.name        stu.age
+	tom     12
+	jack    13
+	lily    13
+	Time taken: 0.048 seconds, Fetched: 3 row(s)
+	
+	# 发生了MR,且数据组织格式已经变化
+	insert into stu_orc select * from stu;
+	hive (test_db)> select * from stu_orc;
+	OK
+	stu_orc.name stu_orc.age
+	tom     12
+	jack    13
+	lily    13
+	Time taken: 0.066 seconds, Fetched: 3 row(s)
+	
+	# 发生 MR且执行了压缩，数据以orc格式进行组织
+	insert into stu_orc_snappy select * frm stu;
+	hive (test_db)> select * from stu_orc_snappy;
+	OK
+	stu_orc_snappy.name     stu_orc_snappy.age
+	tom     12
+	jack    13
+	lily    13
+	Time taken: 0.057 seconds, Fetched: 3 row(s)
+	
+	# 空间比较 （注：样本数据太小，压缩比不能说明问题）
+	[root@master ~]# hdfs dfs -ls /usr/hive/warehouse/test_db/stu/*
+	-rwxrwxrwx   1 root supergroup         23 2018-09-24 00:08 /usr/hive/warehouse/test_db/stu/data.txt
+	[root@master ~]# hdfs dfs -ls /usr/hive/warehouse/test_db/stu_orc/*
+	-rwxrwxrwx   1 root supergroup        292 2018-09-24 00:12 /usr/hive/warehouse/test_db/stu_orc/000000_0
+	[root@master ~]# hdfs dfs -ls /usr/hive/warehouse/test_db/stu_orc_snappy/*
+	-rwxrwxrwx   1 root supergroup        322 2018-09-24 00:17 /usr/hive/warehouse/test_db/stu_orc_snappy/000000_0
+	
+	
+	
+ 
+	 
+	 
+	 
+	
+	
