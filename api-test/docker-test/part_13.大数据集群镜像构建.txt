@@ -757,7 +757,7 @@
 	for host in ${hosts[@]}
 	do
 	  echo "--- --- --- ssh $USER@$host $@ --- --- ---"
-	  ssh $USER@$host cd $DIR && $@
+	  ssh $USER@$host cd $@
 	done
 	
 	exit 0
